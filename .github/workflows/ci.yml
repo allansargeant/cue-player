@@ -14,10 +14,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macos-13 (Intel) runners are retired; build x86_64 by cross-compiling here.
+          # macos-13 (Intel) runners are retired, so x86_64 is cross-compiled here.
+          # No arch flag: CMakeLists already defaults to "arm64;x86_64" on Apple, and
+          # passing it on the command line would split the shell at the semicolon.
           - name: macOS (universal)
             os: macos-14
-            cmake_args: -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64
+            cmake_args: ""
           - name: Linux (ALSA + JACK)
             os: ubuntu-latest
             cmake_args: ""
@@ -26,7 +28,7 @@ jobs:
             cmake_args: ""
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
