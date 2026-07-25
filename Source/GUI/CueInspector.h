@@ -54,6 +54,12 @@ private:
     void updateRoutingMatrix();
     void updateMessageList();
     void editMessage (int index);
+    void buildTimeFields();
+    void refreshTimeFields();
+
+    /** Shows only the sections that apply to the current cue's type, rather than greying
+        out the rest: a file cue has no business showing streaming fields at all. */
+    void updateSectionVisibility();
     void pushSourceInfoToWaveform();
 
     /** A labelled control on one row of the layout. */
@@ -78,6 +84,14 @@ private:
     juce::Component content;
 
     WaveformComponent waveform;
+
+    /** Exact times for the four waveform handles, sitting directly under the timeline so a
+        marker can be typed rather than dragged when a frame matters. */
+    juce::Component timeFieldBar;
+    juce::Label inFieldLabel { {}, "In" }, outFieldLabel { {}, "Out" };
+    juce::Label vampStartFieldLabel { {}, "Vamp from" }, vampEndFieldLabel { {}, "Vamp to" };
+    juce::TextEditor inField, outField, vampStartField, vampEndField;
+
     RoutingMatrixComponent routingMatrix;
 
     juce::TextButton auditionButton { "Audition" };
@@ -96,12 +110,12 @@ private:
     juce::ComboBox linkModeBox, linkTargetBox, linkShapeBox;
     juce::Slider linkDelaySlider, linkDurationSlider;
 
-    // Streaming cues
-    juce::ComboBox streamProviderBox, streamPathBox;
+    // Streaming cues. Provider, audio path and capture channels are installation settings
+    // and live in the Settings window, not here.
     juce::TextEditor streamUriEditor, streamNameEditor;
-    juce::Slider streamInputSlider, streamChannelsSlider;
     juce::ToggleButton streamShuffleToggle { "Shuffle" };
     juce::ToggleButton streamRepeatToggle { "Repeat" };
+    juce::Label streamAccountLabel;
 
     /** Outgoing MIDI/OSC messages for the current cue. */
     struct MessageListModel : public juce::ListBoxModel
@@ -131,6 +145,12 @@ private:
     size_t routingSectionIndex { 0 };
     std::vector<std::unique_ptr<Row>> rows;
     std::vector<juce::Component*> streamingOnly, fileOnly;
+
+    /** Section indices whose whole block is hidden for the wrong cue type. */
+    size_t streamingSectionIndex { 0 };
+    size_t trimSectionIndex { 0 };
+    size_t loopSectionIndex { 0 };
+    size_t routingSectionIndexForVisibility { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CueInspector)
 };

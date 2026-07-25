@@ -34,6 +34,22 @@ public:
     double getMasterGainDb() const noexcept    { return masterGainDb; }
     void   setMasterGainDb (double db);
 
+    //== Defaults for new cues =================================================
+    /** Fade times a newly added cue starts with. Stored with the show rather than with the
+        application, because how long a fade should be is a decision about *this* show, not
+        about the machine it happens to be running on. Every cue keeps its own values once
+        created, so changing the default never reaches back and alters existing cues. */
+    double getDefaultFadeInTime() const noexcept   { return defaultFadeInTime; }
+    double getDefaultFadeOutTime() const noexcept  { return defaultFadeOutTime; }
+    FadeShape getDefaultFadeShape() const noexcept { return defaultFadeShape; }
+
+    void setDefaultFadeInTime (double seconds);
+    void setDefaultFadeOutTime (double seconds);
+    void setDefaultFadeShape (FadeShape shape);
+
+    /** Stamps the show's defaults onto @p cue. Called when a cue is created. */
+    void applyDefaultsTo (Cue& cue) const;
+
     /** Empties the show. */
     void createNewShow();
 
@@ -58,6 +74,9 @@ private:
     juce::File showFile;
     bool dirty { false };
     double masterGainDb { 0.0 };
+    double defaultFadeInTime { 0.0 };
+    double defaultFadeOutTime { 0.0 };
+    FadeShape defaultFadeShape { FadeShape::equalPower };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Show)
 };

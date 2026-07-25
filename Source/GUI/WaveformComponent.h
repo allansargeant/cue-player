@@ -48,6 +48,9 @@ private:
 
     float timeToX (double seconds) const;
     double xToTime (float x) const;
+
+    /** Pixels available for the audio itself, i.e. the width minus the two edge margins. */
+    int getAudioWidth() const;
     Marker markerAt (juce::Point<float> position) const;
     void drawMarker (juce::Graphics&, Marker, double time, juce::Colour, const juce::String& label);
 

@@ -160,7 +160,8 @@ void CueListComponent::paintCell (juce::Graphics& g, int row, int columnId, int 
                 g.setColour (colours::loop);
                 const auto label = cue->streaming.displayName.isNotEmpty()
                                        ? cue->streaming.displayName : cue->streaming.uri;
-                g.drawText (cue->streaming.provider.toUpperCase() + "  " + label,
+                g.drawText (audioEngine.getStreamingSettings().getProviderDisplayName()
+                                + "   " + label,
                             area, juce::Justification::centredLeft, true);
                 break;
             }

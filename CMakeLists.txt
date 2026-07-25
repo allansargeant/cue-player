@@ -60,6 +60,7 @@ target_sources(SimpleCue
         Source/Model/Show.cpp
         Source/Model/FadeCurve.cpp
         Source/Model/ControlMessage.cpp
+        Source/Model/StreamingSettings.cpp
 
         Source/Control/ControlHub.cpp
         Source/Control/ControlSettings.cpp
@@ -82,6 +83,7 @@ target_sources(SimpleCue
         Source/GUI/AudioSetupWindow.cpp
         Source/GUI/ActiveCuesComponent.cpp
         Source/GUI/ControlSetupWindow.cpp
+        Source/GUI/SettingsWindow.cpp
 )
 
 target_include_directories(SimpleCue PRIVATE Source)
@@ -165,13 +167,15 @@ target_sources(SimpleCueTests
         Source/Model/Show.cpp
         Source/Model/FadeCurve.cpp
         Source/Model/ControlMessage.cpp
+        Source/Model/StreamingSettings.cpp
         Source/Control/ControlSettings.cpp
         Source/Control/DmxProtocol.cpp
         Source/Control/DmxControl.cpp
         Source/Control/MidiControl.cpp
         Source/Control/OscControl.cpp
         Source/Audio/CueVoice.cpp
-        Source/Audio/SampleSource.cpp)
+        Source/Audio/SampleSource.cpp
+        Source/GUI/LookAndFeel.cpp)
 
 target_include_directories(SimpleCueTests PRIVATE Source Tests)
 
@@ -187,6 +191,7 @@ target_link_libraries(SimpleCueTests
         juce::juce_audio_basics
         juce::juce_audio_devices
         juce::juce_events
+        juce::juce_gui_basics
         juce::juce_osc
     PUBLIC
         juce::juce_recommended_config_flags

@@ -10,6 +10,7 @@ namespace
     constexpr int labelWidth = 108;
     constexpr int sectionGap = 12;
     constexpr int waveformHeight = 118;
+    constexpr int timeFieldBarHeight = 26;
 }
 
 CueInspector::CueInspector (CueList& list, AudioEngine& engine, ControlHub& hub,
@@ -18,6 +19,8 @@ CueInspector::CueInspector (CueList& list, AudioEngine& engine, ControlHub& hub,
       waveform (formatManager)
 {
     addAndMakeVisible (waveform);
+    buildTimeFields();
+    addAndMakeVisible (timeFieldBar);
     addAndMakeVisible (viewport);
     viewport.setViewedComponent (&content, false);
     viewport.setScrollBarsShown (true, false);
@@ -157,19 +160,10 @@ void CueInspector::buildControls()
     addRow ("", auditionButton);
 
     // --- Streaming ------------------------------------------------------------
-    addSection ("Streaming service");
-
-    streamProviderBox.addItemList ({ "Spotify", "TIDAL", "Apple Music", "YouTube Music" }, 1);
-    streamProviderBox.onChange = [this]
-    {
-        const juce::StringArray keys { "spotify", "tidal", "appleMusic", "youtubeMusic" };
-        const auto index = streamProviderBox.getSelectedId() - 1;
-
-        if (juce::isPositiveAndBelow (index, keys.size()))
-            editCue ([&keys, index] (Cue& c) { c.streaming.provider = keys[index]; });
-    };
-    addRow ("Service", streamProviderBox);
-    streamingOnly.push_back (&streamProviderBox);
+    // Only what belongs to this cue. The account, the provider and the capture patch are
+    // properties of the installation and live in Settings.
+    addSection ("Streaming");
+    streamingSectionIndex = sectionLabels.size() - 1;
 
     streamUriEditor.setMultiLine (false);
     streamUriEditor.setTextToShowWhenEmpty ("spotify:playlist:... or a pasted share link",
@@ -189,44 +183,6 @@ void CueInspector::buildControls()
     addRow ("Shown as", streamNameEditor);
     streamingOnly.push_back (&streamNameEditor);
 
-    streamPathBox.addItem ("Capture from a local loopback input", 1);
-    streamPathBox.addItem ("Play on a remote Connect device", 2);
-    streamPathBox.onChange = [this]
-    {
-        const auto path = streamPathBox.getSelectedId() == 2 ? StreamingAudioPath::remoteDevice
-                                                             : StreamingAudioPath::localCapture;
-        editCue ([path] (Cue& c) { c.streaming.audioPath = path; });
-        updateEnablement();
-    };
-    addRow ("Audio path", streamPathBox, 2);
-    streamingOnly.push_back (&streamPathBox);
-
-    streamInputSlider.setSliderStyle (juce::Slider::LinearBar);
-    streamInputSlider.setRange (1.0, (double) limits::maxOutputChannels, 1.0);
-    streamInputSlider.onValueChange = [this]
-    {
-        editCue ([this] (Cue& c)
-        {
-            c.streaming.captureFirstInputChannel = (int) streamInputSlider.getValue() - 1;
-        });
-        updateRoutingMatrix();
-    };
-    addRow ("First input", streamInputSlider);
-    streamingOnly.push_back (&streamInputSlider);
-
-    streamChannelsSlider.setSliderStyle (juce::Slider::LinearBar);
-    streamChannelsSlider.setRange (1.0, 8.0, 1.0);
-    streamChannelsSlider.onValueChange = [this]
-    {
-        editCue ([this] (Cue& c)
-        {
-            c.streaming.captureNumChannels = (int) streamChannelsSlider.getValue();
-        });
-        updateRoutingMatrix();
-    };
-    addRow ("Channels", streamChannelsSlider);
-    streamingOnly.push_back (&streamChannelsSlider);
-
     streamShuffleToggle.onClick = [this]
     {
         editCue ([this] (Cue& c) { c.streaming.shuffle = streamShuffleToggle.getToggleState(); });
@@ -241,8 +197,14 @@ void CueInspector::buildControls()
     addRow ("", streamRepeatToggle);
     streamingOnly.push_back (&streamRepeatToggle);
 
+    streamAccountLabel.setFont (juce::FontOptions (11.5f, juce::Font::italic));
+    streamAccountLabel.setColour (juce::Label::textColourId, colours::textDim);
+    addRow ("", streamAccountLabel, 2);
+    streamingOnly.push_back (&streamAccountLabel);
+
     // --- Trim -----------------------------------------------------------------
     addSection ("In and out points");
+    trimSectionIndex = sectionLabels.size() - 1;
 
     configureTimeSlider (inPointSlider, 3600.0, " s");
     inPointSlider.onValueChange = [this]
@@ -293,6 +255,7 @@ void CueInspector::buildControls()
 
     // --- Repeat ---------------------------------------------------------------
     addSection ("Loop and vamp");
+    loopSectionIndex = sectionLabels.size() - 1;
 
     loopToggle.onClick = [this]
     {
@@ -476,6 +439,7 @@ void CueInspector::buildControls()
     // --- Routing --------------------------------------------------------------
     addSection ("Output routing");
     routingSectionIndex = sectionLabels.size() - 1;
+    routingSectionIndexForVisibility = routingSectionIndex;
 
     routingMatrix.onRoutingChanged = [this] (const std::vector<RoutePoint>& routes)
     {
@@ -613,6 +577,147 @@ void CueInspector::editMessage (int index)
         }), false);
 }
 
+
+//==============================================================================
+void CueInspector::buildTimeFields()
+{
+    struct FieldSetup
+    {
+        juce::Label* label;
+        juce::TextEditor* field;
+    };
+
+    const FieldSetup setups[] =
+    {
+        { &inFieldLabel,        &inField },
+        { &outFieldLabel,       &outField },
+        { &vampStartFieldLabel, &vampStartField },
+        { &vampEndFieldLabel,   &vampEndField }
+    };
+
+    for (const auto& setup : setups)
+    {
+        setup.label->setFont (juce::FontOptions (10.5f, juce::Font::bold));
+        setup.label->setColour (juce::Label::textColourId, colours::textDim);
+        setup.label->setJustificationType (juce::Justification::centredLeft);
+        timeFieldBar.addAndMakeVisible (*setup.label);
+
+        setup.field->setMultiLine (false);
+        setup.field->setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(),
+                                                 12.0f, juce::Font::plain));
+        setup.field->setJustification (juce::Justification::centredLeft);
+        setup.field->setTooltip ("Type mm:ss.mmm, m:ss, or plain seconds.");
+        timeFieldBar.addAndMakeVisible (*setup.field);
+    }
+
+    // Committed on Enter or on losing focus, never per keystroke: typing "1" on the way to
+    // "1:02" would otherwise move the marker to one second and drag the others with it.
+    const auto commit = [this] (juce::TextEditor& field, void (*apply) (Cue&, double))
+    {
+        const auto* cue = cueList.get (cueIndex);
+
+        if (cue == nullptr)
+            return;
+
+        const auto seconds = parseTimecode (field.getText(), -1.0);
+
+        if (seconds < 0.0)
+        {
+            refreshTimeFields();     // Unparseable: put the real value back.
+            return;
+        }
+
+        editCue ([apply, seconds] (Cue& c) { apply (c, seconds); });
+        refreshTimeFields();
+    };
+
+    inField.onReturnKey = inField.onFocusLost = [this, commit]
+    {
+        commit (inField, [] (Cue& c, double s)
+                { c.startTime = juce::jlimit (0.0, c.resolvedEndTime(), s); });
+    };
+
+    outField.onReturnKey = outField.onFocusLost = [this, commit]
+    {
+        commit (outField, [] (Cue& c, double s)
+                { c.endTime = juce::jlimit (c.startTime, juce::jmax (c.startTime, c.fileDuration), s); });
+    };
+
+    vampStartField.onReturnKey = vampStartField.onFocusLost = [this, commit]
+    {
+        commit (vampStartField, [] (Cue& c, double s)
+                { c.vampStart = juce::jlimit (c.startTime, c.resolvedEndTime(), s); });
+    };
+
+    vampEndField.onReturnKey = vampEndField.onFocusLost = [this, commit]
+    {
+        commit (vampEndField, [] (Cue& c, double s)
+                { c.vampEnd = juce::jlimit (c.startTime, c.resolvedEndTime(), s); });
+    };
+}
+
+void CueInspector::refreshTimeFields()
+{
+    const auto* cue = cueList.get (cueIndex);
+    const auto isFile = cue != nullptr && cue->type == CueType::audioFile;
+
+    const auto setField = [] (juce::TextEditor& field, double seconds, bool enabled)
+    {
+        field.setEnabled (enabled);
+
+        // Never overwrite a field somebody is part-way through typing into.
+        if (! field.hasKeyboardFocus (false))
+            field.setText (enabled ? formatTimecode (seconds) : juce::String(),
+                           juce::dontSendNotification);
+    };
+
+    setField (inField,  cue != nullptr ? cue->startTime : 0.0, isFile);
+    setField (outField, cue != nullptr ? cue->resolvedEndTime() : 0.0, isFile);
+
+    const auto vampUsable = isFile && cue->vampEnabled;
+    setField (vampStartField, cue != nullptr ? cue->vampStart : 0.0, vampUsable);
+    setField (vampEndField,   cue != nullptr ? cue->vampEnd : 0.0, vampUsable);
+}
+
+void CueInspector::updateSectionVisibility()
+{
+    const auto* cue = cueList.get (cueIndex);
+    const auto type = cue != nullptr ? cue->type : CueType::audioFile;
+    const auto isFile = cue != nullptr && type == CueType::audioFile;
+    const auto isStreaming = type == CueType::streaming;
+
+    const auto setSectionVisible = [this] (size_t section, bool visible)
+    {
+        if (section >= sectionLabels.size())
+            return;
+
+        sectionLabels[section]->setVisible (visible);
+
+        const auto first = sectionRowStart[section];
+        const auto last  = section + 1 < sectionRowStart.size() ? sectionRowStart[section + 1]
+                                                                : rows.size();
+
+        for (auto i = first; i < last; ++i)
+        {
+            rows[i]->label.setVisible (visible);
+            rows[i]->control->setVisible (visible);
+        }
+    };
+
+    setSectionVisible (streamingSectionIndex, isStreaming);
+    setSectionVisible (trimSectionIndex, isFile);
+    setSectionVisible (loopSectionIndex, isFile);
+
+    // A control cue has no audio, so it has nothing to route.
+    const auto hasAudio = isFile || isStreaming;
+    setSectionVisible (routingSectionIndexForVisibility, hasAudio);
+    routingMatrix.setVisible (hasAudio);
+
+    // The waveform and its time fields only mean anything for a file cue.
+    waveform.setVisible (isFile);
+    timeFieldBar.setVisible (isFile);
+}
+
 //==============================================================================
 void CueInspector::editCue (const std::function<void (Cue&)>& fn)
 {
@@ -673,11 +778,6 @@ void CueInspector::updateEnablement()
     for (auto* c : streamingOnly) c->setEnabled (isStreaming);
     for (auto* c : fileOnly)      c->setEnabled (isFile);
 
-    const auto capturing = isStreaming
-                        && cue->streaming.audioPath == StreamingAudioPath::localCapture;
-    streamInputSlider.setEnabled (capturing);
-    streamChannelsSlider.setEnabled (capturing);
-
     loopCountSlider.setEnabled (isFile && cue->loopEnabled);
     vampStartSlider.setEnabled (isFile && cue->vampEnabled);
     vampEndSlider.setEnabled (isFile && cue->vampEnabled);
@@ -702,7 +802,7 @@ void CueInspector::updateRoutingMatrix()
     if (cue != nullptr)
     {
         numSourceChannels = cue->type == CueType::streaming
-                                ? juce::jmax (1, cue->streaming.captureNumChannels)
+                                ? juce::jmax (1, audioEngine.getStreamingSettings().captureNumChannels)
                                 : juce::jmax (0, cue->fileChannels);
     }
 
@@ -735,8 +835,10 @@ void CueInspector::refresh()
     {
         pushSourceInfoToWaveform();
         updateEnablement();
+        updateSectionVisibility();
         updateRoutingMatrix();
         updateMessageList();
+        refreshTimeFields();
         repaint();
         return;
     }
@@ -781,26 +883,33 @@ void CueInspector::refresh()
     linkShapeBox.setSelectedId ((int) cue->link.shape + 1, juce::dontSendNotification);
     updateLinkTargets();
 
-    const juce::StringArray providerKeys { "spotify", "tidal", "appleMusic", "youtubeMusic" };
-    const auto providerIndex = providerKeys.indexOf (cue->streaming.provider);
-    streamProviderBox.setSelectedId (providerIndex >= 0 ? providerIndex + 1 : 1,
-                                     juce::dontSendNotification);
-
     if (! streamUriEditor.hasKeyboardFocus (false))
         streamUriEditor.setText (cue->streaming.uri, juce::dontSendNotification);
 
     streamNameEditor.setText (cue->streaming.displayName, juce::dontSendNotification);
-    streamPathBox.setSelectedId (cue->streaming.audioPath == StreamingAudioPath::remoteDevice ? 2 : 1,
-                                 juce::dontSendNotification);
-    streamInputSlider.setValue (cue->streaming.captureFirstInputChannel + 1, juce::dontSendNotification);
-    streamChannelsSlider.setValue (cue->streaming.captureNumChannels, juce::dontSendNotification);
     streamShuffleToggle.setToggleState (cue->streaming.shuffle, juce::dontSendNotification);
     streamRepeatToggle.setToggleState (cue->streaming.repeat, juce::dontSendNotification);
 
+    {
+        const auto& streamingSettings = audioEngine.getStreamingSettings();
+        const auto path = streamingSettings.audioPath == StreamingAudioPath::localCapture
+                              ? "captured from inputs "
+                                  + juce::String (streamingSettings.captureFirstInputChannel + 1)
+                                  + "-" + juce::String (streamingSettings.captureFirstInputChannel
+                                                        + streamingSettings.captureNumChannels)
+                              : juce::String ("played on a remote device");
+
+        streamAccountLabel.setText (streamingSettings.getProviderDisplayName() + ", " + path
+                                        + "   (change in Settings)",
+                                    juce::dontSendNotification);
+    }
+
     pushSourceInfoToWaveform();
     updateEnablement();
+    updateSectionVisibility();
     updateRoutingMatrix();
     updateMessageList();
+    refreshTimeFields();
     resized();
     repaint();
 }
@@ -814,7 +923,30 @@ void CueInspector::paint (juce::Graphics& g)
 void CueInspector::resized()
 {
     auto bounds = getLocalBounds();
-    waveform.setBounds (bounds.removeFromTop (waveformHeight));
+
+    if (waveform.isVisible())
+    {
+        waveform.setBounds (bounds.removeFromTop (waveformHeight));
+
+        auto barArea = bounds.removeFromTop (timeFieldBarHeight);
+        timeFieldBar.setBounds (barArea);
+
+        // Four evenly spaced label-and-field pairs directly under the timeline.
+        auto inner = timeFieldBar.getLocalBounds().reduced (8, 3);
+        const auto cellWidth = inner.getWidth() / 4;
+
+        juce::Label* labels[] = { &inFieldLabel, &outFieldLabel,
+                                  &vampStartFieldLabel, &vampEndFieldLabel };
+        juce::TextEditor* fields[] = { &inField, &outField, &vampStartField, &vampEndField };
+
+        for (int i = 0; i < 4; ++i)
+        {
+            auto cell = inner.removeFromLeft (cellWidth).reduced (3, 0);
+            labels[i]->setBounds (cell.removeFromLeft (i < 2 ? 22 : 66));
+            fields[i]->setBounds (cell);
+        }
+    }
+
     viewport.setBounds (bounds);
 
     const auto width = juce::jmax (320, viewport.getMaximumVisibleWidth());
@@ -824,6 +956,11 @@ void CueInspector::resized()
 
     for (size_t section = 0; section < sectionLabels.size(); ++section)
     {
+        // A hidden section takes up no space at all, so the panel closes up around it
+        // rather than leaving a gap where the wrong cue type's controls would have been.
+        if (! sectionLabels[section]->isVisible())
+            continue;
+
         sectionLabels[section]->setBounds (8, y, width - 16, 16);
         y += 16 + rowGap;
 
@@ -859,7 +996,7 @@ void CueInspector::resized()
             y += panelHeight;
         }
 
-        if (section == routingSectionIndex)
+        if (section == routingSectionIndex && routingMatrix.isVisible())
         {
             routingMatrix.setBounds (8, y, width - 16, routingMatrix.getPreferredHeight());
             y += routingMatrix.getHeight();

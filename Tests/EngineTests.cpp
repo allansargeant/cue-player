@@ -646,12 +646,8 @@ void testShowRoundTrip (const juce::File& directory, const juce::File& audioFile
     second.number = "13";
     second.name = "Aftermath";
     second.type = CueType::streaming;
-    second.streaming.provider = "tidal";
     second.streaming.uri = "tidal:playlist:abc-123";
     second.streaming.displayName = "House playlist";
-    second.streaming.audioPath = StreamingAudioPath::localCapture;
-    second.streaming.captureFirstInputChannel = 2;
-    second.streaming.captureNumChannels = 2;
     second.streaming.shuffle = true;
 
     const auto secondId = second.id;
@@ -720,11 +716,8 @@ void testShowRoundTrip (const juce::File& directory, const juce::File& audioFile
     if (s != nullptr)
     {
         check (s->type == CueType::streaming, "cue type round trips");
-        check (s->streaming.provider == "tidal", "streaming provider round trips");
         check (s->streaming.uri == "tidal:playlist:abc-123", "streaming uri round trips");
         check (s->streaming.displayName == "House playlist", "streaming display name round trips");
-        check (s->streaming.audioPath == StreamingAudioPath::localCapture, "audio path round trips");
-        check (s->streaming.captureFirstInputChannel == 2, "capture input round trips");
         check (s->streaming.shuffle, "shuffle round trips");
     }
 

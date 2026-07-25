@@ -176,21 +176,24 @@ bool AudioEngine::buildSpec (const Cue& cue, VoiceSpec& spec,
 
     if (cue.type == CueType::streaming)
     {
-        if (cue.streaming.audioPath != StreamingAudioPath::localCapture)
+        // Which path the audio takes, and which inputs it arrives on, are properties of the
+        // installation rather than of the cue - see StreamingSettings.
+        if (streamingSettings.audioPath != StreamingAudioPath::localCapture)
         {
-            setError ("This streaming cue plays on a remote device, so it has no audio to mix.");
+            setError ("Streaming is set to play on a remote device, so it has no audio to mix.");
             return false;
         }
 
         if (! inputsEnabled || numInputChannels.load() <= 0)
         {
-            setError ("Streaming capture needs device inputs. Turn inputs on in Audio Setup.");
+            setError ("Streaming capture needs device inputs. Turn inputs on in Audio setup.");
             return false;
         }
 
         spec.fromDeviceInput   = true;
-        spec.inputFirstChannel = juce::jmax (0, cue.streaming.captureFirstInputChannel);
-        spec.inputNumChannels  = juce::jlimit (1, limits::maxSourceChannels, cue.streaming.captureNumChannels);
+        spec.inputFirstChannel = juce::jmax (0, streamingSettings.captureFirstInputChannel);
+        spec.inputNumChannels  = juce::jlimit (1, limits::maxSourceChannels,
+                                               streamingSettings.captureNumChannels);
         numSourceChannels      = spec.inputNumChannels;
 
         spec.regionStart = 0;
@@ -366,7 +369,7 @@ bool AudioEngine::fireCue (int cueIndex, juce::int64 extraPreWaitSamples,
 
     // --- a streaming cue playing on the service's own device -------------------
     if (cue->type == CueType::streaming
-        && cue->streaming.audioPath == StreamingAudioPath::remoteDevice)
+        && streamingSettings.audioPath == StreamingAudioPath::remoteDevice)
     {
         juce::String error;
 

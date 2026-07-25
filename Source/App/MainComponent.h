@@ -8,6 +8,7 @@
 #include "GUI/AudioSetupWindow.h"
 #include "GUI/CueInspector.h"
 #include "GUI/ControlSetupWindow.h"
+#include "GUI/SettingsWindow.h"
 #include "GUI/CueListComponent.h"
 #include "GUI/TransportBar.h"
 #include "Model/Show.h"
@@ -68,11 +69,15 @@ private:
 
     void newShow();
     void openShow();
-    void saveShow (bool forceChooseFile);
+    /** Saves the show, choosing a filename first when it has none. @p onComplete is called
+        with whether a save actually happened, so the quit prompt can wait for it. */
+    void saveShow (bool forceChooseFile, std::function<void (bool)> onComplete = {});
     void addCueFromFile (const juce::File& file, int insertAt = -1);
     void addStreamingCue();
     void addControlCue();
     void showControlSetup();
+    void showSettings();
+    void saveStreamingSettings();
     void publishControlStatus();
 
     /** Resolves the cue an incoming action refers to, by list position when the transport
@@ -109,6 +114,7 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<AudioSetupWindow> audioSetupWindow;
     std::unique_ptr<ControlSetupWindow> controlSetupWindow;
+    std::unique_ptr<SettingsWindow> settingsWindow;
     juce::File screenshotAudioDirectory;
     bool screenshotMode { false };
     juce::TooltipWindow tooltips { this, 700 };

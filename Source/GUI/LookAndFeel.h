@@ -47,4 +47,12 @@ public:
 /** Formats seconds as mm:ss.t, or h:mm:ss.t past an hour. Negative input gives "--:--". */
 juce::String formatTime (double seconds);
 
+/** Formats seconds to millisecond precision, for fields an operator types exact times into.
+    Always mm:ss.mmm, or h:mm:ss.mmm past an hour. */
+juce::String formatTimecode (double seconds);
+
+/** Reads a time typed by hand. Accepts plain seconds ("12.5"), mm:ss ("1:02.5") and
+    h:mm:ss ("1:02:03.5"). Returns @p fallback if nothing usable was typed. */
+double parseTimecode (const juce::String& text, double fallback = 0.0);
+
 } // namespace cp

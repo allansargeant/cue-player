@@ -126,4 +126,57 @@ juce::String formatTime (double seconds)
     return juce::String::formatted ("%02d:%02d.%d", minutes, secs, tenths);
 }
 
+juce::String formatTimecode (double seconds)
+{
+    if (seconds < 0.0 || std::isnan (seconds))
+        seconds = 0.0;
+
+    const auto totalMs = (juce::int64) (seconds * 1000.0 + 0.5);
+    const auto millis  = (int) (totalMs % 1000);
+    const auto total   = totalMs / 1000;
+    const auto secs    = (int) (total % 60);
+    const auto minutes = (int) ((total / 60) % 60);
+    const auto hours   = (int) (total / 3600);
+
+    if (hours > 0)
+        return juce::String::formatted ("%d:%02d:%02d.%03d", hours, minutes, secs, millis);
+
+    return juce::String::formatted ("%02d:%02d.%03d", minutes, secs, millis);
+}
+
+double parseTimecode (const juce::String& text, double fallback)
+{
+    const auto trimmed = text.trim();
+
+    if (trimmed.isEmpty())
+        return fallback;
+
+    // Colon-separated fields count from the right, so "5" is five seconds, "1:05" is a
+    // minute and five, and "1:00:05" is an hour and five. That way an operator can type
+    // whichever is quickest without having to pad the rest out.
+    const auto parts = juce::StringArray::fromTokens (trimmed, ":", "");
+
+    if (parts.size() > 3)
+        return fallback;
+
+    double seconds = 0.0;
+    bool sawNumber = false;
+
+    for (int i = 0; i < parts.size(); ++i)
+    {
+        const auto field = parts[i].trim();
+
+        if (field.isEmpty() || ! field.containsAnyOf ("0123456789"))
+            return fallback;
+
+        seconds = seconds * 60.0 + field.getDoubleValue();
+        sawNumber = true;
+    }
+
+    if (! sawNumber)
+        return fallback;
+
+    return juce::jmax (0.0, seconds);
+}
+
 } // namespace cp

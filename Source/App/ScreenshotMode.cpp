@@ -294,12 +294,8 @@ void buildDemoShow (Show& show, const juce::Array<juce::File>& audioFiles)
         cue.number = "5";
         cue.name = "Walk-out playlist";
         cue.type = CueType::streaming;
-        cue.streaming.provider = "spotify";
         cue.streaming.uri = "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M";
         cue.streaming.displayName = "House walk-out";
-        cue.streaming.audioPath = StreamingAudioPath::localCapture;
-        cue.streaming.captureFirstInputChannel = 0;
-        cue.streaming.captureNumChannels = 2;
         cue.fadeInTime = 4.0;
         list.insert (cue);
     }
@@ -384,7 +380,10 @@ ControlSettings demoControlSettings()
     fader.action = ControlActionType::masterLevel;
     settings.midiBindings.push_back (fader);
 
-    settings.dmx.artNetEnabled = true;
+    // Deliberately left off. Art-Net is broadcast, so any console or stray application on
+    // the network can put a frame on universe 1 and fire a cue mid-capture - which is the
+    // control layer working correctly, but it makes the screenshot non-reproducible.
+    settings.dmx.artNetEnabled = false;
     settings.dmx.universe = 1;
     settings.dmx.startAddress = 101;
     settings.dmx.numDirectCueChannels = 16;

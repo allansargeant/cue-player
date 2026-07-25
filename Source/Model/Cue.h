@@ -4,6 +4,7 @@
 
 #include "Model/ControlMessage.h"
 #include "Model/FadeCurve.h"
+#include "Model/StreamingSettings.h"
 
 namespace cp
 {
@@ -79,35 +80,14 @@ enum class CueType
 juce::String toString (CueType t);
 CueType cueTypeFromString (const juce::String& s);
 
-/** Where the audio of a streaming cue physically comes from.
+/** A reference to something playable on a streaming service.
 
-    No streaming service hands a desktop application decrypted PCM, so a streaming cue is
-    never decoded by us. Instead we drive the service's own player over its web API and
-    choose one of two paths for the sound itself.
+    Only what genuinely belongs to *this cue*. Which service the account is on, which
+    developer application it authenticates as and which loopback input the audio arrives on
+    are properties of the installation, not of a cue, and live in StreamingSettings.
 */
-enum class StreamingAudioPath
-{
-    /** The service plays on one of its own Connect devices. We only send transport and
-        volume commands; the audio never reaches our mixer, so fades are done with the
-        service's volume endpoint and are coarse and network-latent. */
-    remoteDevice = 0,
-
-    /** The service's desktop app is pointed at a loopback device (BlackHole, VB-Cable,
-        VoiceMeeter, a PipeWire/JACK sink) which we open as an *input*. The audio then
-        runs through the normal voice path, so fade curves, gain and the routing matrix
-        all behave exactly as they do for a file cue. */
-    localCapture
-};
-
-juce::String toString (StreamingAudioPath p);
-StreamingAudioPath streamingAudioPathFromString (const juce::String& s);
-
-/** A reference to something playable on a streaming service. */
 struct StreamingRef
 {
-    /** Provider key: "spotify", "tidal", "appleMusic", "youtubeMusic". */
-    juce::String provider;
-
     /** Provider-native URI or a pasted share link — "spotify:playlist:37i9...", a TIDAL
         playlist uuid, a music.youtube.com URL. Normalised by the provider adapter. */
     juce::String uri;
@@ -117,17 +97,6 @@ struct StreamingRef
 
     bool shuffle { false };
     bool repeat  { false };
-
-    /** Identifier of the Connect/playback device to target, when using remoteDevice.
-        Empty means "whatever the account is currently playing on". */
-    juce::String targetDeviceId;
-
-    StreamingAudioPath audioPath { StreamingAudioPath::localCapture };
-
-    /** First device *input* channel carrying the loopback feed, and how many channels of
-        it to take. Only meaningful when audioPath == localCapture. */
-    int captureFirstInputChannel { 0 };
-    int captureNumChannels { 2 };
 };
 
 //==============================================================================

@@ -14,7 +14,10 @@
 #include "Control/DmxControl.h"
 #include "Control/MidiControl.h"
 #include "Control/OscControl.h"
+#include "GUI/LookAndFeel.h"
 #include "Model/Cue.h"
+#include "Model/Show.h"
+#include "Model/StreamingSettings.h"
 #include "Model/ControlMessage.h"
 
 #include <cstring>
@@ -931,6 +934,131 @@ void testControlCue()
                     "the message address round trips");
 }
 
+
+//==============================================================================
+void testTimecodeParsing()
+{
+    cptest::section ("timecode fields");
+
+    // Plain seconds, for someone who knows the number.
+    checkNear (parseTimecode ("12.5"), 12.5, 1.0e-9, "plain seconds parse");
+    checkNear (parseTimecode ("0"), 0.0, 1.0e-9, "zero parses");
+
+    // Colon-separated fields count from the right, so nothing has to be padded out.
+    checkNear (parseTimecode ("1:02.5"), 62.5, 1.0e-9, "m:ss parses");
+    checkNear (parseTimecode ("1:00:05"), 3605.0, 1.0e-9, "h:mm:ss parses");
+    checkNear (parseTimecode ("02:30"), 150.0, 1.0e-9, "leading zeroes are fine");
+    checkNear (parseTimecode ("  3:00  "), 180.0, 1.0e-9, "surrounding space is ignored");
+
+    // Anything unusable must leave the marker where it was rather than jumping it to zero.
+    checkNear (parseTimecode ("", 7.0), 7.0, 1.0e-9, "empty text keeps the old value");
+    checkNear (parseTimecode ("abc", 7.0), 7.0, 1.0e-9, "nonsense keeps the old value");
+    checkNear (parseTimecode ("1:2:3:4", 7.0), 7.0, 1.0e-9, "too many fields keeps the old value");
+    checkNear (parseTimecode (":", 7.0), 7.0, 1.0e-9, "a lone separator keeps the old value");
+    checkNear (parseTimecode ("-5", 7.0), 0.0, 1.0e-9, "a negative time clamps to zero");
+
+    checkEqual (formatTimecode (62.5), "01:02.500", "formats to millisecond precision");
+    checkEqual (formatTimecode (3605.25), "1:00:05.250", "formats past an hour");
+    checkEqual (formatTimecode (0.0), "00:00.000", "formats zero");
+
+    // Round trip: what the field shows must read back as the same time.
+    for (const auto seconds : { 0.0, 0.001, 1.5, 62.5, 599.999, 3605.25 })
+        checkNear (parseTimecode (formatTimecode (seconds)), seconds, 0.001,
+                   "formatTimecode round trips through parseTimecode");
+}
+
+void testShowDefaults()
+{
+    cptest::section ("project default fade times");
+
+    Show show;
+
+    checkNear (show.getDefaultFadeInTime(), 0.0, 1.0e-9, "a new show defaults to no fade");
+
+    show.setDefaultFadeInTime (2.5);
+    show.setDefaultFadeOutTime (4.0);
+    show.setDefaultFadeShape (FadeShape::sCurve);
+
+    Cue cue;
+    show.applyDefaultsTo (cue);
+
+    checkNear (cue.fadeInTime, 2.5, 1.0e-9, "a new cue picks up the default fade in");
+    checkNear (cue.fadeOutTime, 4.0, 1.0e-9, "a new cue picks up the default fade out");
+    check (cue.fadeInShape == FadeShape::sCurve, "a new cue picks up the default curve");
+
+    // The whole point of a default: it seeds a cue, it does not own it afterwards.
+    cue.fadeInTime = 9.0;
+    show.setDefaultFadeInTime (1.0);
+    checkNear (cue.fadeInTime, 9.0, 1.0e-9,
+               "changing the default does not reach back into an existing cue");
+
+    show.setDefaultFadeInTime (-5.0);
+    checkNear (show.getDefaultFadeInTime(), 0.0, 1.0e-9, "a negative default clamps to zero");
+
+    show.setDefaultFadeOutTime (10000.0);
+    check (show.getDefaultFadeOutTime() <= 120.0, "an absurd default is clamped");
+
+    // Round trip through the show file.
+    auto directory = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                         .getChildFile ("simplecue-defaults-test");
+    directory.createDirectory();
+    const auto file = directory.getChildFile ("defaults.cueshow");
+
+    show.setDefaultFadeInTime (3.25);
+    show.setDefaultFadeOutTime (6.5);
+    show.setDefaultFadeShape (FadeShape::logarithmic);
+
+    check (show.save (file).isEmpty(), "a show with defaults saves");
+
+    Show reloaded;
+    check (reloaded.load (file).isEmpty(), "it loads back");
+    checkNear (reloaded.getDefaultFadeInTime(), 3.25, 1.0e-9, "default fade in round trips");
+    checkNear (reloaded.getDefaultFadeOutTime(), 6.5, 1.0e-9, "default fade out round trips");
+    check (reloaded.getDefaultFadeShape() == FadeShape::logarithmic, "default curve round trips");
+
+    directory.deleteRecursively();
+}
+
+void testStreamingSettings()
+{
+    cptest::section ("streaming settings");
+
+    StreamingSettings settings;
+    settings.provider = "tidal";
+    settings.clientId = "abc123";
+    settings.audioPath = StreamingAudioPath::remoteDevice;
+    settings.captureFirstInputChannel = 4;
+    settings.captureNumChannels = 2;
+    settings.targetDeviceId = "device-xyz";
+
+    const auto restored = StreamingSettings::fromVar (settings.toVar());
+
+    checkEqual (restored.provider, "tidal", "provider round trips");
+    checkEqual (restored.clientId, "abc123", "client id round trips");
+    check (restored.audioPath == StreamingAudioPath::remoteDevice, "audio path round trips");
+    check (restored.captureFirstInputChannel == 4, "capture input round trips");
+    check (restored.captureNumChannels == 2, "capture channel count round trips");
+    checkEqual (restored.targetDeviceId, "device-xyz", "target device round trips");
+
+    checkEqual (restored.getProviderDisplayName(), "TIDAL", "provider display name resolves");
+
+    // Nothing stored yet must not leave the app pointing at an empty provider.
+    const auto fresh = StreamingSettings::fromVar (juce::var());
+    checkEqual (fresh.provider, "spotify", "an absent setting falls back to a real provider");
+    check (fresh.audioPath == StreamingAudioPath::localCapture,
+           "the default path is the one where fades and routing actually work");
+
+    check (StreamingSettings::providerKeys().size() == StreamingSettings::providerNames().size(),
+           "every provider key has a display name");
+
+    // A cue carries only its own reference now; the account lives in settings.
+    Cue cue;
+    cue.type = CueType::streaming;
+    check (! cue.isPlayable(), "a streaming cue with no uri has nothing to play");
+    cue.streaming.uri = "spotify:playlist:123";
+    check (cue.isPlayable(), "a uri is all a streaming cue needs of its own");
+}
+
 } // namespace
 
 //==============================================================================
@@ -948,4 +1076,7 @@ void runControlTests()
     testDmxTriggering();
     testControlMessagePersistence();
     testControlCue();
+    testTimecodeParsing();
+    testShowDefaults();
+    testStreamingSettings();
 }

@@ -5,8 +5,13 @@ namespace cp
 
 namespace
 {
-    constexpr float markerGrabPixels = 7.0f;
+    constexpr float markerGrabPixels = 8.0f;
     constexpr int   rulerHeight = 16;
+
+    /** Blank margin left and right of the audio. Without it the in and out markers sit
+        hard against the component edge, where grabbing one means catching the edge of the
+        window instead - and where there is no room to drag past them. */
+    constexpr int   edgePadding = 16;
 }
 
 WaveformComponent::WaveformComponent (juce::AudioFormatManager& formatManager)
@@ -75,17 +80,26 @@ void WaveformComponent::changeListenerCallback (juce::ChangeBroadcaster*)
 float WaveformComponent::timeToX (double seconds) const
 {
     if (fileLength <= 0.0)
-        return 0.0f;
+        return (float) edgePadding;
 
-    return (float) (seconds / fileLength) * (float) getWidth();
+    return (float) edgePadding
+         + (float) (seconds / fileLength) * (float) getAudioWidth();
 }
 
 double WaveformComponent::xToTime (float x) const
 {
-    if (getWidth() <= 0)
+    const auto width = getAudioWidth();
+
+    if (width <= 0)
         return 0.0;
 
-    return juce::jlimit (0.0, fileLength, (double) (x / (float) getWidth()) * fileLength);
+    return juce::jlimit (0.0, fileLength,
+                         (double) ((x - (float) edgePadding) / (float) width) * fileLength);
+}
+
+int WaveformComponent::getAudioWidth() const
+{
+    return juce::jmax (1, getWidth() - 2 * edgePadding);
 }
 
 WaveformComponent::Marker WaveformComponent::markerAt (juce::Point<float> position) const
@@ -139,7 +153,7 @@ void WaveformComponent::paint (juce::Graphics& g)
         return;
     }
 
-    auto waveArea = bounds.withTrimmedTop (rulerHeight);
+    auto waveArea = bounds.withTrimmedTop (rulerHeight).reduced (edgePadding, 0);
 
     if (! currentFile.existsAsFile())
     {

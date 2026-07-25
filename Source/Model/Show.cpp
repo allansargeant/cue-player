@@ -48,11 +48,56 @@ void Show::setMasterGainDb (double db)
     sendChangeMessage();
 }
 
+void Show::setDefaultFadeInTime (double seconds)
+{
+    const auto clamped = juce::jlimit (0.0, 120.0, seconds);
+
+    if (std::abs (clamped - defaultFadeInTime) < 1.0e-9)
+        return;
+
+    defaultFadeInTime = clamped;
+    dirty = true;
+    sendChangeMessage();
+}
+
+void Show::setDefaultFadeOutTime (double seconds)
+{
+    const auto clamped = juce::jlimit (0.0, 120.0, seconds);
+
+    if (std::abs (clamped - defaultFadeOutTime) < 1.0e-9)
+        return;
+
+    defaultFadeOutTime = clamped;
+    dirty = true;
+    sendChangeMessage();
+}
+
+void Show::setDefaultFadeShape (FadeShape shape)
+{
+    if (shape == defaultFadeShape)
+        return;
+
+    defaultFadeShape = shape;
+    dirty = true;
+    sendChangeMessage();
+}
+
+void Show::applyDefaultsTo (Cue& cue) const
+{
+    cue.fadeInTime   = defaultFadeInTime;
+    cue.fadeOutTime  = defaultFadeOutTime;
+    cue.fadeInShape  = defaultFadeShape;
+    cue.fadeOutShape = defaultFadeShape;
+}
+
 void Show::createNewShow()
 {
     cueList.clear();
     showFile = juce::File();
     masterGainDb = 0.0;
+    defaultFadeInTime = 0.0;
+    defaultFadeOutTime = 0.0;
+    defaultFadeShape = FadeShape::equalPower;
     dirty = false;
     sendChangeMessage();
 }
@@ -68,6 +113,9 @@ juce::String Show::save (const juce::File& file)
     root->setProperty ("format",       "simplecue-show");
     root->setProperty ("version",      showFormatVersion);
     root->setProperty ("masterGainDb", masterGainDb);
+    root->setProperty ("defaultFadeInTime",  defaultFadeInTime);
+    root->setProperty ("defaultFadeOutTime", defaultFadeOutTime);
+    root->setProperty ("defaultFadeShape",   toString (defaultFadeShape));
     root->setProperty ("cues",         cueList.toVar (target.getParentDirectory()));
 
     const auto json = juce::JSON::toString (juce::var (root), false);
@@ -114,6 +162,9 @@ juce::String Show::load (const juce::File& file)
         return "That show was saved by a newer version of SimpleCue.";
 
     masterGainDb = juce::jlimit (-100.0, 12.0, (double) parsed.getProperty ("masterGainDb", 0.0));
+    defaultFadeInTime  = juce::jlimit (0.0, 120.0, (double) parsed.getProperty ("defaultFadeInTime", 0.0));
+    defaultFadeOutTime = juce::jlimit (0.0, 120.0, (double) parsed.getProperty ("defaultFadeOutTime", 0.0));
+    defaultFadeShape   = fadeShapeFromString (parsed.getProperty ("defaultFadeShape", {}).toString());
 
     cueList.removeChangeListener (this);
     cueList.restoreFromVar (parsed.getProperty ("cues", {}), file.getParentDirectory());

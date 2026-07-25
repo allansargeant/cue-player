@@ -62,17 +62,6 @@ CueType cueTypeFromString (const juce::String& s)
     return CueType::audioFile;
 }
 
-juce::String toString (StreamingAudioPath p)
-{
-    return p == StreamingAudioPath::remoteDevice ? "remoteDevice" : "localCapture";
-}
-
-StreamingAudioPath streamingAudioPathFromString (const juce::String& s)
-{
-    return s == "remoteDevice" ? StreamingAudioPath::remoteDevice
-                               : StreamingAudioPath::localCapture;
-}
-
 //==============================================================================
 Cue::Cue()
     : id (juce::Uuid()) {}
@@ -167,7 +156,7 @@ bool Cue::isPlayable() const noexcept
         return ! outputMessages.empty();
 
     if (type == CueType::streaming)
-        return streaming.provider.isNotEmpty() && streaming.uri.isNotEmpty();
+        return streaming.uri.isNotEmpty();
 
     return audioFile.existsAsFile() && fileChannels > 0 && fileSampleRate > 0.0;
 }
@@ -221,15 +210,10 @@ juce::var Cue::toVar (const juce::File& showDirectory) const
     if (type == CueType::streaming)
     {
         auto* s = new juce::DynamicObject();
-        s->setProperty ("provider",       streaming.provider);
-        s->setProperty ("uri",            streaming.uri);
-        s->setProperty ("displayName",    streaming.displayName);
-        s->setProperty ("shuffle",        streaming.shuffle);
-        s->setProperty ("repeat",         streaming.repeat);
-        s->setProperty ("targetDeviceId", streaming.targetDeviceId);
-        s->setProperty ("audioPath",      toString (streaming.audioPath));
-        s->setProperty ("captureFirstInputChannel", streaming.captureFirstInputChannel);
-        s->setProperty ("captureNumChannels",       streaming.captureNumChannels);
+        s->setProperty ("uri",         streaming.uri);
+        s->setProperty ("displayName", streaming.displayName);
+        s->setProperty ("shuffle",     streaming.shuffle);
+        s->setProperty ("repeat",      streaming.repeat);
         o->setProperty ("streaming", juce::var (s));
     }
 
@@ -313,16 +297,12 @@ Cue Cue::fromVar (const juce::var& v, const juce::File& showDirectory)
 
     if (const auto s = get ("streaming"); s.isObject())
     {
-        c.streaming.provider       = s.getProperty ("provider", {}).toString();
-        c.streaming.uri            = s.getProperty ("uri", {}).toString();
-        c.streaming.displayName    = s.getProperty ("displayName", {}).toString();
-        c.streaming.shuffle        = (bool) s.getProperty ("shuffle", false);
-        c.streaming.repeat         = (bool) s.getProperty ("repeat", false);
-        c.streaming.targetDeviceId = s.getProperty ("targetDeviceId", {}).toString();
-        c.streaming.audioPath      = streamingAudioPathFromString (
-                                         s.getProperty ("audioPath", {}).toString());
-        c.streaming.captureFirstInputChannel = (int) s.getProperty ("captureFirstInputChannel", 0);
-        c.streaming.captureNumChannels       = juce::jmax (1, (int) s.getProperty ("captureNumChannels", 2));
+        // provider, audioPath and the capture channels used to live here. They are
+        // installation settings now, so anything older simply drops those fields.
+        c.streaming.uri         = s.getProperty ("uri", {}).toString();
+        c.streaming.displayName = s.getProperty ("displayName", {}).toString();
+        c.streaming.shuffle     = (bool) s.getProperty ("shuffle", false);
+        c.streaming.repeat      = (bool) s.getProperty ("repeat", false);
     }
 
     c.startTime = (double) get ("startTime");

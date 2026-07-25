@@ -11,6 +11,7 @@ namespace
     const char* lastShowDirKey = "lastShowDirectory";
     const char* lastAudioDirKey = "lastAudioDirectory";
     const char* controlSettingsKey = "controlSettings";
+    const char* streamingSettingsKey = "streamingSettings";
 }
 
 MainComponent::MainComponent (juce::ApplicationProperties& props)
@@ -73,6 +74,21 @@ MainComponent::MainComponent (juce::ApplicationProperties& props)
             reportError ("Control setup could not be fully applied.\n\n" + problems);
     }
 
+    {
+        StreamingSettings streaming;
+
+        if (auto* user = properties.getUserSettings())
+        {
+            juce::var stored;
+
+            if (juce::JSON::parse (user->getValue (streamingSettingsKey), stored).wasOk()
+                && stored.isObject())
+                streaming = StreamingSettings::fromVar (stored);
+        }
+
+        audioEngine.setStreamingSettings (streaming);
+    }
+
     controlHub.onStatusRequested = [this]
     {
         ControlHub::StatusSnapshot snapshot;
@@ -127,6 +143,8 @@ MainComponent::~MainComponent()
             user->setValue (deviceStateKey, state.get());
 
         user->setValue (controlSettingsKey, juce::JSON::toString (controlHub.getSettings().toVar(), true));
+        user->setValue (streamingSettingsKey,
+                        juce::JSON::toString (audioEngine.getStreamingSettings().toVar(), true));
     }
 
     if (screenshotAudioDirectory != juce::File())
@@ -249,34 +267,29 @@ void MainComponent::confirmDiscardChanges (std::function<void (bool)> callback)
             .withButton ("Discard")
             .withButton ("Cancel")
             .withAssociatedComponent (this),
-        [this, callback] (int result)
+        // The callback receives the *index* of the button pressed, counted from zero in the
+        // order they were added above - not 1, 2, 3. Getting that wrong made Discard open
+        // the Save-as dialogue and made Cancel quit the app.
+        [this, callback] (int buttonIndex)
         {
-            if (result == 1)          // Save
-            {
-                if (show.getFile() == juce::File())
-                {
-                    // Needs a filename first, so this cannot complete synchronously.
-                    saveShow (true);
-                    callback (false);
-                    return;
-                }
+            enum { saveButton = 0, discardButton = 1, cancelButton = 2 };
 
-                if (const auto error = show.save(); error.isNotEmpty())
-                {
-                    reportError (error);
-                    callback (false);
-                    return;
-                }
+            switch (buttonIndex)
+            {
+                case saveButton:
+                    // Saving may need a filename first, so it finishes asynchronously and
+                    // only then reports whether it is safe to carry on.
+                    saveShow (false, [callback] (bool saved) { callback (saved); });
+                    break;
 
-                callback (true);
-            }
-            else if (result == 2)     // Discard
-            {
-                callback (true);
-            }
-            else                      // Cancel
-            {
-                callback (false);
+                case discardButton:
+                    callback (true);
+                    break;
+
+                case cancelButton:
+                default:
+                    callback (false);
+                    break;
             }
         });
 }
@@ -350,16 +363,30 @@ void MainComponent::openShowFile (const juce::File& file)
                      + "\n\nThey are marked MISSING in the cue list. Re-point them before the show.");
 }
 
-void MainComponent::saveShow (bool forceChooseFile)
+void MainComponent::saveShow (bool forceChooseFile, std::function<void (bool)> onComplete)
 {
+    // Always reports the outcome, however the save finished, so callers such as the
+    // quit-time prompt can wait for a Save-as to complete before letting the app close.
+    const auto report = [onComplete] (bool saved)
+    {
+        if (onComplete != nullptr)
+            onComplete (saved);
+    };
+
     if (! forceChooseFile && show.getFile() != juce::File())
     {
         show.setMasterGainDb (audioEngine.getMasterGainDb());
 
         if (const auto error = show.save(); error.isNotEmpty())
+        {
             reportError (error);
+            updateWindowTitle();
+            report (false);
+            return;
+        }
 
         updateWindowTitle();
+        report (true);
         return;
     }
 
@@ -372,12 +399,16 @@ void MainComponent::saveShow (bool forceChooseFile)
     fileChooser->launchAsync (juce::FileBrowserComponent::saveMode
                                   | juce::FileBrowserComponent::canSelectFiles
                                   | juce::FileBrowserComponent::warnAboutOverwriting,
-        [this] (const juce::FileChooser& chooser)
+        [this, report] (const juce::FileChooser& chooser)
         {
             auto file = chooser.getResult();
 
+            // Backing out of the file chooser is a cancellation, not a save.
             if (file == juce::File())
+            {
+                report (false);
                 return;
+            }
 
             if (! file.hasFileExtension (Show::fileExtension()))
                 file = file.withFileExtension (Show::fileExtension());
@@ -387,6 +418,7 @@ void MainComponent::saveShow (bool forceChooseFile)
             if (const auto error = show.save (file); error.isNotEmpty())
             {
                 reportError (error);
+                report (false);
                 return;
             }
 
@@ -394,12 +426,15 @@ void MainComponent::saveShow (bool forceChooseFile)
                 user->setValue (lastShowDirKey, file.getParentDirectory().getFullPathName());
 
             updateWindowTitle();
+            report (true);
         });
 }
 
 //==============================================================================
 void MainComponent::scanFileInto (Cue& cue, const juce::File& file)
 {
+    // Only touches the source and its trim. Fades and everything else the caller may have
+    // set from the show's defaults are left alone.
     cue.audioFile = file;
     cue.fileDuration = 0.0;
     cue.fileChannels = 0;
@@ -428,6 +463,7 @@ void MainComponent::addCueFromFile (const juce::File& file, int insertAt)
 {
     Cue cue;
     cue.number = show.getCueList().suggestNextNumber();
+    show.applyDefaultsTo (cue);
     scanFileInto (cue, file);
 
     const auto index = show.getCueList().insert (std::move (cue), insertAt);
@@ -446,20 +482,20 @@ void MainComponent::addStreamingCue()
     Cue cue;
     cue.type = CueType::streaming;
     cue.number = show.getCueList().suggestNextNumber();
+    show.applyDefaultsTo (cue);
     cue.name = "Streaming cue";
-    cue.streaming.provider = "spotify";
-    cue.streaming.audioPath = StreamingAudioPath::localCapture;
 
     const auto index = show.getCueList().insert (std::move (cue));
     show.getCueList().setSelectedIndex (index);
     inspector.setCueIndex (index);
     cueListComponent.selectRow (index);
 
-    if (! audioEngine.areInputChannelsEnabled())
+    if (! audioEngine.areInputChannelsEnabled()
+        && audioEngine.getStreamingSettings().audioPath == StreamingAudioPath::localCapture)
         reportError ("Streaming cues capture the service's audio from a loopback input.\n\n"
-                     "Turn inputs on in Audio setup, point Spotify or TIDAL at a loopback "
-                     "device (BlackHole, VB-Cable, or a PipeWire/JACK sink), then pick that "
-                     "device's channels on the cue.");
+                     "Turn inputs on in Audio setup, point the service's desktop app at a "
+                     "loopback device (BlackHole, VB-Cable, or a PipeWire/JACK sink), then "
+                     "choose that device's channels in Settings.");
 }
 
 void MainComponent::chooseFileForCue (int index)
@@ -799,6 +835,34 @@ void MainComponent::addControlCue()
     cueListComponent.selectRow (index);
 }
 
+
+void MainComponent::saveStreamingSettings()
+{
+    if (auto* user = properties.getUserSettings())
+        user->setValue (streamingSettingsKey,
+                        juce::JSON::toString (audioEngine.getStreamingSettings().toVar(), true));
+}
+
+void MainComponent::showSettings()
+{
+    if (settingsWindow != nullptr)
+    {
+        settingsWindow->toFront (true);
+        return;
+    }
+
+    settingsWindow = std::make_unique<SettingsWindow> (
+        audioEngine.getStreamingSettings(), show,
+        [this] (const StreamingSettings& updated)
+        {
+            audioEngine.setStreamingSettings (updated);
+            saveStreamingSettings();
+            inspector.refresh();
+        });
+
+    settingsWindow->onClose = [this] { settingsWindow = nullptr; };
+}
+
 void MainComponent::showControlSetup()
 {
     if (controlSetupWindow != nullptr)
@@ -912,6 +976,8 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String&)
         case 3:
             menu.addCommandItem (&commandManager, CommandIDs::showAudioSetup);
             menu.addCommandItem (&commandManager, CommandIDs::showControlSetup);
+            menu.addSeparator();
+            menu.addCommandItem (&commandManager, CommandIDs::showSettings);
             break;
 
         default:
@@ -940,7 +1006,8 @@ void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
         CommandIDs::go, CommandIDs::stopAll, CommandIDs::panic, CommandIDs::pauseResume,
         CommandIDs::releaseVamp, CommandIDs::auditionCue,
         CommandIDs::setStandbyToSelected, CommandIDs::standbyPrevious, CommandIDs::standbyNext,
-        CommandIDs::showAudioSetup, CommandIDs::showControlSetup });
+        CommandIDs::showAudioSetup, CommandIDs::showControlSetup,
+        CommandIDs::showSettings });
 }
 
 void MainComponent::getCommandInfo (juce::CommandID commandID, juce::ApplicationCommandInfo& info)
@@ -1034,6 +1101,9 @@ void MainComponent::getCommandInfo (juce::CommandID commandID, juce::Application
 
         case CommandIDs::stopAll:
             info.setInfo ("Stop all", "Fade everything out over two seconds", "Transport", 0);
+            // S is the one an operator's hand finds without looking; Cmd-. stays for anyone
+            // who expects the platform convention.
+            info.addDefaultKeypress ('s', 0);
             info.addDefaultKeypress ('.', cmd);
             break;
 
@@ -1073,6 +1143,10 @@ void MainComponent::getCommandInfo (juce::CommandID commandID, juce::Application
         case CommandIDs::showControlSetup:
             info.setInfo ("Control setup...", "OSC, MIDI, Art-Net and sACN", "Audio", 0);
             info.addDefaultKeypress (',', shiftCmd);
+            break;
+
+        case CommandIDs::showSettings:
+            info.setInfo ("Settings...", "Streaming account and new-cue defaults", "Audio", 0);
             break;
 
         default:
@@ -1162,6 +1236,7 @@ bool MainComponent::perform (const InvocationInfo& info)
 
         case CommandIDs::showAudioSetup:   showAudioSetup(); return true;
         case CommandIDs::showControlSetup: showControlSetup(); return true;
+        case CommandIDs::showSettings:     showSettings(); return true;
 
         default:
             return false;

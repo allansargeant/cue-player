@@ -64,6 +64,11 @@ public:
     //== Wiring ===============================================================
     void setCueList (CueList* list) noexcept { cueList = list; }
 
+    /** Streaming is configured once for the installation, not per cue. The engine keeps a
+        copy so building a voice never has to reach back into the application's settings. */
+    void setStreamingSettings (const StreamingSettings& s) { streamingSettings = s; }
+    const StreamingSettings& getStreamingSettings() const noexcept { return streamingSettings; }
+
     /** Hook for streaming cues that play on a remote Connect device. Phase 3 installs the
         provider adapter here; until then such a cue reports that it has no transport. */
     std::function<bool (const Cue&, juce::String& error)> streamingTransport;
@@ -202,6 +207,7 @@ private:
     SampleCache& cache;
     juce::AudioDeviceManager deviceManager;
     CueList* cueList { nullptr };
+    StreamingSettings streamingSettings;
 
     std::array<std::unique_ptr<CueVoice>, limits::maxVoices> voices;
     std::array<VoiceRecord, limits::maxVoices> records;

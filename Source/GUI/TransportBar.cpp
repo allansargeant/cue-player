@@ -20,6 +20,13 @@ TransportBar::TransportBar (AudioEngine& engine)
     styleButton (vampButton,  colours::vamp,       colours::background);
     styleButton (setupButton, colours::panelLight, colours::textDim);
 
+    // The key is printed on the button, so the shortcut is learnable from the surface
+    // rather than only from a menu nobody opens mid-show.
+    goButton.setButtonText ("GO  (space)");
+    stopButton.setButtonText ("Stop all (S)");
+    panicButton.setButtonText ("PANIC (esc)");
+    vampButton.setButtonText ("Release vamp (enter)");
+
     goButton.onClick    = [this] { if (onGo) onGo(); };
     stopButton.onClick  = [this] { if (onStopAll) onStopAll(); };
     panicButton.onClick = [this] { if (onPanic) onPanic(); };
@@ -69,7 +76,7 @@ void TransportBar::setShowStatus (const juce::String& text)
 
 void TransportBar::timerCallback()
 {
-    pauseButton.setButtonText (audioEngine.isPaused() ? "Resume" : "Pause");
+    pauseButton.setButtonText (audioEngine.isPaused() ? "Resume (P)" : "Pause (P)");
 
     const auto vamping = audioEngine.isAnythingVamping();
     vampButton.setEnabled (vamping);
@@ -142,19 +149,21 @@ void TransportBar::resized()
 {
     auto bounds = getLocalBounds().reduced (8, 6);
 
-    goButton.setBounds (bounds.removeFromLeft (108).reduced (0, 2));
+    goButton.setBounds (bounds.removeFromLeft (124).reduced (0, 2));
     bounds.removeFromLeft (10);
 
-    auto standby = bounds.removeFromLeft (240).withTrimmedTop (12);
+    auto standby = bounds.removeFromLeft (224).withTrimmedTop (12);
     standbyNumberLabel.setBounds (standby.removeFromTop (26));
     standbyNameLabel.setBounds (standby);
     bounds.removeFromLeft (10);
 
-    auto buttons = bounds.removeFromLeft (330).withTrimmedTop (14);
-    stopButton.setBounds (buttons.removeFromLeft (80).reduced (2, 0));
-    pauseButton.setBounds (buttons.removeFromLeft (72).reduced (2, 0));
-    vampButton.setBounds (buttons.removeFromLeft (108).reduced (2, 0));
-    panicButton.setBounds (buttons.removeFromLeft (64).reduced (2, 0));
+    // Wide enough for the label *and* its bracketed shortcut on one line. A button that
+    // wraps to two lines looks broken, and these are read at a glance under pressure.
+    auto buttons = bounds.removeFromLeft (424).withTrimmedTop (14);
+    stopButton.setBounds (buttons.removeFromLeft (100).reduced (2, 0));
+    pauseButton.setBounds (buttons.removeFromLeft (86).reduced (2, 0));
+    vampButton.setBounds (buttons.removeFromLeft (146).reduced (2, 0));
+    panicButton.setBounds (buttons.removeFromLeft (92).reduced (2, 0));
 
     auto right = bounds.removeFromRight (300);
     setupButton.setBounds (right.removeFromTop (22).removeFromRight (100));

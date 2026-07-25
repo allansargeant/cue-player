@@ -38,6 +38,7 @@ namespace CommandIDs
 
         showAudioSetup,
         showControlSetup,
+        showSettings,
         showAbout
     };
 }
