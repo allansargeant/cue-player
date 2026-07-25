@@ -216,6 +216,10 @@ selection and channel routing. Done.
 **Phase 2** — control surface: OSC in and out, MIDI bindings, MSC, MMC, Art-Net, sACN,
 outgoing messages on cues, control cues, and a Companion-facing status feed. Done.
 
+**v0.2.0** — cue lifecycles (play / devamp / end, walked by GO), a Settings window holding
+the streaming account and the show's new-cue fade defaults, typed exact times under the
+waveform, and a stop shortcut.
+
 Not yet built:
 
 - **Phase 3 — streaming provider adapters.** OAuth PKCE and transport for the four services
