@@ -196,15 +196,32 @@ void WaveformComponent::paint (juce::Graphics& g)
     g.setColour (colours::textDim);
     g.setFont (juce::FontOptions (10.0f));
 
-    if (fileLength > 0.0)
+    if (fileLength > 0.0 && getWidth() > 0)
     {
-        const auto step = fileLength > 600.0 ? 60.0 : (fileLength > 60.0 ? 10.0 : 1.0);
+        // Pick the interval from the width, not from the length alone: a fixed rule like
+        // "one second below a minute" puts forty overlapping labels on a forty-second cue.
+        // Aim for a label roughly every 110 px, then snap to an interval an operator reads
+        // as a time rather than an arbitrary number.
+        static constexpr double niceSteps[] = { 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 15.0,
+                                                30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0 };
+
+        const auto wanted = fileLength / juce::jmax (2.0, (double) getWidth() / 110.0);
+        auto step = niceSteps[juce::numElementsInArray (niceSteps) - 1];
+
+        for (const auto candidate : niceSteps)
+        {
+            if (candidate >= wanted)
+            {
+                step = candidate;
+                break;
+            }
+        }
 
         for (double t = 0.0; t <= fileLength; t += step)
         {
             const auto x = timeToX (t);
             g.drawVerticalLine ((int) x, (float) rulerHeight - 4.0f, (float) rulerHeight);
-            g.drawText (formatTime (t), (int) x + 2, 0, 60, rulerHeight - 3,
+            g.drawText (formatTime (t), (int) x + 3, 0, 64, rulerHeight - 3,
                         juce::Justification::centredLeft);
         }
     }

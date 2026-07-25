@@ -1,17 +1,19 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 
+#include <cstdio>
+
 #include "App/MainComponent.h"
 #include "GUI/LookAndFeel.h"
 
 namespace cp
 {
 
-class CuePlayerApplication : public juce::JUCEApplication
+class SimpleCueApplication : public juce::JUCEApplication
 {
 public:
-    CuePlayerApplication() = default;
+    SimpleCueApplication() = default;
 
-    const juce::String getApplicationName() override    { return "Cue Player"; }
+    const juce::String getApplicationName() override    { return "SimpleCue"; }
     const juce::String getApplicationVersion() override { return JUCE_APPLICATION_VERSION_STRING; }
     bool moreThanOneInstanceAllowed() override          { return false; }
 
@@ -20,13 +22,34 @@ public:
         juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
 
         juce::PropertiesFile::Options options;
-        options.applicationName     = "Cue Player";
+        options.applicationName     = "SimpleCue";
         options.filenameSuffix      = ".settings";
         options.osxLibrarySubFolder = "Application Support";
-        options.folderName          = "CuePlayer";
+        options.folderName          = "SimpleCue";
         properties.setStorageParameters (options);
 
         mainWindow = std::make_unique<MainWindow> (getApplicationName(), properties);
+
+        // `--screenshots <dir>` loads a demo show and writes PNGs of the app for the README,
+        // then quits. Rendering happens offscreen through JUCE's own rasteriser, so it needs
+        // no screen-recording permission and captures exactly what the app draws.
+        if (const auto arguments = juce::StringArray::fromTokens (commandLine, true);
+            arguments.contains ("--screenshots"))
+        {
+            const auto target = arguments[arguments.indexOf ("--screenshots") + 1].unquoted().trim();
+
+            if (target.isEmpty())
+            {
+                std::fprintf (stderr, "--screenshots needs an output directory\n");
+                quit();
+                return;
+            }
+
+            mainWindow->setSize (1440, 900);
+            mainWindow->getMainComponent().captureScreenshots (juce::File (target),
+                                                               [this] { quit(); });
+            return;
+        }
 
         if (commandLine.isNotEmpty())
         {
@@ -127,11 +150,11 @@ public:
     };
 
 private:
-    CuePlayerLookAndFeel lookAndFeel;
+    SimpleCueLookAndFeel lookAndFeel;
     juce::ApplicationProperties properties;
     std::unique_ptr<MainWindow> mainWindow;
 };
 
 } // namespace cp
 
-START_JUCE_APPLICATION (cp::CuePlayerApplication)
+START_JUCE_APPLICATION (cp::SimpleCueApplication)

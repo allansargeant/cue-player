@@ -31,10 +31,10 @@ namespace colours
     const juce::Colour meterClip    { 0xffe74c3c };
 }
 
-class CuePlayerLookAndFeel : public juce::LookAndFeel_V4
+class SimpleCueLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    CuePlayerLookAndFeel();
+    SimpleCueLookAndFeel();
 
     void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& backgroundColour,
                                bool shouldDrawAsHighlighted, bool shouldDrawAsDown) override;

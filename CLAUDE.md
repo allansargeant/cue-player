@@ -1,4 +1,4 @@
-# cue-player (Cue Player)
+# simplecue (SimpleCue)
 
 Platform-independent audio cue player for theatre and live events. Cues (audio files with
 in/out points), fades, links (cue-to-cue transitions), loops and vamps. JUCE 8 / C++20,
@@ -8,7 +8,10 @@ CMake. Public repo. Phases 1 (engine/UI) and 2 (control protocols) complete; Pha
 ## Commands
 - Configure: `cmake -B build -DCMAKE_BUILD_TYPE=Release`
 - Build: `cmake --build build -j8`
-- Tests: `./build/CuePlayerTests_artefacts/<config>/CuePlayerTests`
+- Tests: `./build/SimpleCueTests_artefacts/<config>/SimpleCueTests`
+
+The internal C++ namespace is still `cp`. It predates the rename to SimpleCue and is left
+alone deliberately: renaming it touches every file for no user-visible gain.
 
 ## Architecture
 - `Source/Model` — `Cue`, `CueList`, `Show` (JSON `.cueshow`), `FadeCurve`. Message thread only.

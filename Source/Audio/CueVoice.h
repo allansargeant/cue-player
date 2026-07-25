@@ -99,7 +99,8 @@ public:
     juce::int64 getRegionStart() const noexcept      { return spec.regionStart; }
     juce::int64 getRegionEnd() const noexcept        { return spec.regionEnd; }
 
-    /** True while the voice is circling its vamp region and has not been released. */
+    /** True while the play head is inside an armed, unreleased vamp region — not merely
+        while a vamp is armed somewhere later in the cue. */
     bool isVamping() const noexcept              { return vampingNow.load (std::memory_order_relaxed); }
     int  getVampPassCount() const noexcept       { return vampPasses.load (std::memory_order_relaxed); }
     int  getPlayPassCount() const noexcept       { return playPasses.load (std::memory_order_relaxed); }
@@ -155,6 +156,7 @@ private:
                     int numSamples) noexcept;
     void handleBoundary() noexcept;
     bool isFinalPass() const noexcept;
+    bool isCirclingVamp() const noexcept;
     void finish() noexcept;
 
     VoiceSpec spec;

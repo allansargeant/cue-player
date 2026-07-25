@@ -1,5 +1,7 @@
 #include "App/MainComponent.h"
 
+#include "App/ScreenshotMode.h"
+
 namespace cp
 {
 
@@ -117,13 +119,18 @@ MainComponent::~MainComponent()
 {
     stopTimer();
 
-    if (auto* user = properties.getUserSettings())
+    // A screenshot run rearranges the control settings on purpose; writing them back would
+    // leave the operator listening on ports they never asked for.
+    if (auto* user = properties.getUserSettings(); user != nullptr && ! screenshotMode)
     {
         if (auto state = audioEngine.createDeviceStateXml())
             user->setValue (deviceStateKey, state.get());
 
         user->setValue (controlSettingsKey, juce::JSON::toString (controlHub.getSettings().toVar(), true));
     }
+
+    if (screenshotAudioDirectory != juce::File())
+        screenshotAudioDirectory.deleteRecursively();
 
     controlHub.setActionHandler (nullptr);
     audioEngine.onCueFired = nullptr;
@@ -208,7 +215,7 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 void MainComponent::updateWindowTitle()
 {
     if (auto* window = findParentComponentOfClass<juce::DocumentWindow>())
-        window->setName ("Cue Player  -  " + show.getTitle()
+        window->setName ("SimpleCue  -  " + show.getTitle()
                          + (show.hasUnsavedChanges() ? " *" : ""));
 }
 
@@ -217,7 +224,7 @@ void MainComponent::reportError (const juce::String& message)
     juce::NativeMessageBox::showAsync (
         juce::MessageBoxOptions()
             .withIconType (juce::MessageBoxIconType::WarningIcon)
-            .withTitle ("Cue Player")
+            .withTitle ("SimpleCue")
             .withMessage (message)
             .withButton ("OK")
             .withAssociatedComponent (this),
@@ -561,6 +568,78 @@ void MainComponent::preloadShowAudio()
 }
 
 
+
+//==============================================================================
+void MainComponent::captureScreenshots (const juce::File& outputDir, std::function<void()> onComplete)
+{
+    screenshotMode = true;
+    outputDir.createDirectory();
+
+    screenshotAudioDirectory = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                   .getChildFile ("simplecue-screenshot-audio");
+
+    const auto audioFiles = screenshots::writeDemoAudio (screenshotAudioDirectory);
+    screenshots::buildDemoShow (show, audioFiles);
+    controlHub.applySettings (screenshots::demoControlSettings());
+
+    for (const auto& file : audioFiles)
+        sampleCache.request (file);
+
+    inspector.setCueIndex (show.getCueList().getSelectedIndex());
+    cueListComponent.refresh();
+
+    // Well down, but not silent. Fully muted would leave the output meters flat, and a
+    // screenshot of dead meters reads as a bug rather than as a quiet moment. The demo
+    // audio is synthesised at a modest level, so this lands around -20 dBFS: audible if
+    // the machine's output is up, but not a shock.
+    audioEngine.setMasterGainDb (-18.0);
+
+    // The waveform thumbnail and the sample cache both load on background threads, so the
+    // capture has to wait for them rather than photographing a half-drawn window.
+    juce::Timer::callAfterDelay (2500, [this, outputDir, onComplete]
+    {
+        // Fire a few cues so the list and the running panel show real playback state.
+        audioEngine.go (0);
+        audioEngine.go (2);
+
+        juce::Timer::callAfterDelay (3000, [this, outputDir, onComplete]
+        {
+            cueListComponent.refresh();
+            inspector.refresh();
+
+            screenshots::capture (*this, outputDir.getChildFile ("main-window.png"));
+
+            showControlSetup();
+
+            juce::Timer::callAfterDelay (900, [this, outputDir, onComplete]
+            {
+                if (controlSetupWindow != nullptr)
+                    if (auto* content = controlSetupWindow->getContentComponent())
+                        screenshots::capture (*content, outputDir.getChildFile ("control-setup.png"));
+
+                controlSetupWindow = nullptr;
+                showAudioSetup();
+
+                juce::Timer::callAfterDelay (900, [this, outputDir, onComplete]
+                {
+                    if (audioSetupWindow != nullptr)
+                        if (auto* content = audioSetupWindow->getContentComponent())
+                            screenshots::capture (*content, outputDir.getChildFile ("audio-setup.png"));
+
+                    audioSetupWindow = nullptr;
+                    audioEngine.panic();
+
+                    juce::Timer::callAfterDelay (300, [onComplete]
+                    {
+                        if (onComplete != nullptr)
+                            onComplete();
+                    });
+                });
+            });
+        });
+    });
+}
+
 //==============================================================================
 void MainComponent::publishControlStatus()
 {
@@ -730,6 +809,11 @@ void MainComponent::showControlSetup()
 
     controlSetupWindow = std::make_unique<ControlSetupWindow> (controlHub, [this]
     {
+        // Never write settings during a screenshot run: those are demo values, and the
+        // operator's real ports and devices must survive regenerating the docs.
+        if (screenshotMode)
+            return;
+
         if (auto* user = properties.getUserSettings())
             user->setValue (controlSettingsKey,
                             juce::JSON::toString (controlHub.getSettings().toVar(), true));

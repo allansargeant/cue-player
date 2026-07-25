@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end check of Cue Player's OSC surface.
+"""End-to-end check of SimpleCue's OSC surface.
 
 Drives the running app over a real UDP socket and reads its status feed back, so this
 exercises the whole path -- socket, parser, action dispatch, engine, feedback -- rather

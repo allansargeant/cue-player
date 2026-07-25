@@ -1,8 +1,8 @@
 # End-to-end control tests
 
-These drive a **running** Cue Player over real UDP sockets and read its status feed back,
+These drive a **running** SimpleCue over real UDP sockets and read its status feed back,
 so they exercise the whole path — socket, parser, action dispatch, engine, feedback —
-rather than the parsers that `CuePlayerTests` already covers on their own.
+rather than the parsers that `SimpleCueTests` already covers on their own.
 
 They are not wired into CMake or CI, because they need an app instance with the right
 control settings and a free pair of ports. Run them by hand when changing the control
@@ -10,7 +10,7 @@ layer.
 
 ## Setting up
 
-Launch Cue Player, open **Control setup**, and set:
+Launch SimpleCue, open **Control setup**, and set:
 
 - **OSC** — listen on port `53000`, feedback enabled, with one target at `127.0.0.1:53099`
 - **DMX** (for the Art-Net test) — Art-Net enabled, universe `1`, start address `1`

@@ -37,6 +37,12 @@ public:
     /** Calls @p callback with true when it is safe to throw the current show away. */
     void confirmDiscardChanges (std::function<void (bool)> callback);
 
+    /** Loads a demo show, opens the setup windows and writes PNGs of each into @p outputDir,
+        then calls @p onComplete. Used by `SimpleCue --screenshots <dir>` to regenerate the
+        images in the README from a known state. Suppresses the usual settings save, so a
+        screenshot run never leaves the operator's ports and devices rearranged. */
+    void captureScreenshots (const juce::File& outputDir, std::function<void()> onComplete);
+
     //== MenuBarModel ==========================================================
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex (int index, const juce::String& name) override;
@@ -103,6 +109,8 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<AudioSetupWindow> audioSetupWindow;
     std::unique_ptr<ControlSetupWindow> controlSetupWindow;
+    juce::File screenshotAudioDirectory;
+    bool screenshotMode { false };
     juce::TooltipWindow tooltips { this, 700 };
 
     static constexpr int activeCuesWidth = 300;

@@ -1,6 +1,6 @@
-# Cue Player
+# SimpleCue
 
-[![ci](https://github.com/allansargeant/cue-player/actions/workflows/ci.yml/badge.svg)](https://github.com/allansargeant/cue-player/actions/workflows/ci.yml)
+[![ci](https://github.com/allansargeant/simplecue/actions/workflows/ci.yml/badge.svg)](https://github.com/allansargeant/simplecue/actions/workflows/ci.yml)
 
 > **AI-assisted project.** This codebase was created with [Claude Code](https://claude.com/claude-code)
 > (Anthropic), directed and reviewed by a human author. The playback engine is verified
@@ -24,6 +24,24 @@ around cues, fades, links, loops and vamps.
 - **Control** — trigger it from OSC, MIDI, MIDI Show Control, Art-Net or sACN, and have
   cues send MIDI and OSC out to other gear.
 
+![The cue list, inspector and running-cue panel](docs/images/main-window.png)
+
+*Cue 1 looping under the house, cue 3 circling its vamp, and the inspector showing the vamp
+markers on the waveform. Cue 4 is a control cue — no audio, just messages out.*
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/control-setup.png" alt="Control setup"></td>
+<td width="50%"><img src="docs/images/audio-setup.png" alt="Audio setup"></td>
+</tr>
+<tr>
+<td>Control setup: the OSC address scheme, MIDI bindings, MSC filtering and the DMX channel
+map, with a live monitor of incoming traffic.</td>
+<td>Audio setup: device, sample rate and buffer, plus the input toggle that streaming
+loopback capture needs.</td>
+</tr>
+</table>
+
 ## Audio backends
 
 | Platform | Backends |
@@ -42,7 +60,7 @@ it from [Steinberg](https://www.steinberg.net/developers/) and point CMake at th
 folder:
 
 ```bash
-cmake -B build -DCUEPLAYER_ASIO_SDK_PATH=C:/SDKs/asiosdk_2.3.3
+cmake -B build -DSIMPLECUE_ASIO_SDK_PATH=C:/SDKs/asiosdk_2.3.3
 ```
 
 Without it, Windows builds still get WASAPI (shared and exclusive) and DirectSound.
@@ -65,11 +83,26 @@ sudo apt install libasound2-dev libjack-jackd2-dev libfreetype6-dev libfontconfi
 ## Running the engine tests
 
 ```bash
-./build/CuePlayerTests_artefacts/Release/CuePlayerTests
+./build/SimpleCueTests_artefacts/Release/SimpleCueTests
 ```
 
 There are also two end-to-end scripts that drive a **running** app over real UDP sockets —
 see [Tests/e2e](Tests/e2e).
+
+## Regenerating the screenshots
+
+The images above are rendered by the app itself, offscreen through JUCE's own rasteriser,
+from a demo show built in code. That means they can be regenerated from a known state after
+a UI change rather than drifting out of date:
+
+```bash
+"./build/SimpleCue_artefacts/Debug/SimpleCue.app/Contents/MacOS/SimpleCue" --screenshots docs/images
+```
+
+It loads the demo show, opens each window, writes the PNGs and quits. The master level is
+pinned to silence for the run, and the demo audio is synthesised rather than sampled, so
+nothing plays out loud and no one's copyright is involved. Your own control settings are
+left alone.
 
 ## Keyboard
 
@@ -105,7 +138,7 @@ to the message-thread timer, because nothing can predict when those finish.
 
 ## Control
 
-Cue Player can be driven from a lighting desk, a Companion page, a tablet or another
+SimpleCue can be driven from a lighting desk, a Companion page, a tablet or another
 machine, and cues can send messages out to other gear.
 
 | | |
@@ -125,7 +158,7 @@ Full reference, including the DMX channel map and the OSC address table:
 
 ## Streaming services
 
-Cue Player can drive **Spotify, TIDAL, Apple Music and YouTube Music** for background music
+SimpleCue can drive **Spotify, TIDAL, Apple Music and YouTube Music** for background music
 and playlists, with an important caveat:
 
 > **No streaming service will hand a desktop application decrypted audio.** DRM (Widevine)
@@ -136,7 +169,7 @@ Two ways to work with that, both modelled on the cue:
 
 1. **Local capture (recommended)** — point the service's desktop app at a loopback device
    (BlackHole on macOS, VB-Cable or VoiceMeeter on Windows, a PipeWire/JACK sink on Linux)
-   and open that device's inputs in Cue Player. The audio then runs through the normal
+   and open that device's inputs in SimpleCue. The audio then runs through the normal
    voice path, so fade curves, gain and the routing matrix behave exactly as they do for a
    file cue. Enable inputs in **Audio setup** first.
 2. **Remote device** — the service plays on one of its own Connect devices and we send only

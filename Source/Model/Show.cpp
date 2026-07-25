@@ -65,7 +65,7 @@ juce::String Show::save (const juce::File& file)
         return "No file to save to.";
 
     auto* root = new juce::DynamicObject();
-    root->setProperty ("format",       "cue-player-show");
+    root->setProperty ("format",       "simplecue-show");
     root->setProperty ("version",      showFormatVersion);
     root->setProperty ("masterGainDb", masterGainDb);
     root->setProperty ("cues",         cueList.toVar (target.getParentDirectory()));
@@ -103,11 +103,15 @@ juce::String Show::load (const juce::File& file)
     if (result.failed())
         return "Could not read show: " + result.getErrorMessage();
 
-    if (parsed.getProperty ("format", {}).toString() != "cue-player-show")
-        return "That does not look like a Cue Player show file.";
+    // "cue-player-show" is what the format was called before the app was renamed. Shows
+    // written then are otherwise identical, so there is no reason to refuse them.
+    const auto format = parsed.getProperty ("format", {}).toString();
+
+    if (format != "simplecue-show" && format != "cue-player-show")
+        return "That does not look like a SimpleCue show file.";
 
     if ((int) parsed.getProperty ("version", 0) > showFormatVersion)
-        return "That show was saved by a newer version of Cue Player.";
+        return "That show was saved by a newer version of SimpleCue.";
 
     masterGainDb = juce::jlimit (-100.0, 12.0, (double) parsed.getProperty ("masterGainDb", 0.0));
 

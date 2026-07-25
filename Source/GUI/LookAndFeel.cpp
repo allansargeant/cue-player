@@ -3,7 +3,7 @@
 namespace cp
 {
 
-CuePlayerLookAndFeel::CuePlayerLookAndFeel()
+SimpleCueLookAndFeel::SimpleCueLookAndFeel()
 {
     setColour (juce::ResizableWindow::backgroundColourId, colours::background);
     setColour (juce::DocumentWindow::textColourId,        colours::text);
@@ -56,7 +56,7 @@ CuePlayerLookAndFeel::CuePlayerLookAndFeel()
     setColour (juce::AlertWindow::outlineColourId,        colours::outline);
 }
 
-void CuePlayerLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
+void SimpleCueLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button,
                                                  const juce::Colour& backgroundColour,
                                                  bool shouldDrawAsHighlighted, bool shouldDrawAsDown)
 {
@@ -76,7 +76,7 @@ void CuePlayerLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button
     g.drawRoundedRectangle (bounds, 4.0f, 1.0f);
 }
 
-void CuePlayerLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
+void SimpleCueLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
                                              float sliderPos, float rotaryStartAngle,
                                              float rotaryEndAngle, juce::Slider& slider)
 {

@@ -1,0 +1,163 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # One platform failing should not deny everyone else a download.
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macos-13 (Intel) runners are retired, so x86_64 is cross-compiled from arm64.
+          # CMakeLists already defaults CMAKE_OSX_ARCHITECTURES to "arm64;x86_64".
+          - name: macOS universal
+            os: macos-14
+            artefact: macos-universal
+
+          - name: Windows x64
+            os: windows-latest
+            artefact: windows-x64
+            cmake_args: -A x64
+
+          # Cross-compiled from an x64 host. JUCE has to build its juceaide helper for the
+          # host first, which is the usual place a Windows-on-ARM build falls over, so this
+          # one is allowed to fail without taking the release with it.
+          - name: Windows arm64
+            os: windows-latest
+            artefact: windows-arm64
+            cmake_args: -A ARM64
+            experimental: true
+            skip_tests: true
+
+          # 22.04 rather than latest: the binary then runs on anything with glibc 2.35 or
+          # newer, instead of only on very recent distributions.
+          - name: Linux x64
+            os: ubuntu-22.04
+            artefact: linux-x64
+
+          - name: Linux arm64
+            os: ubuntu-22.04-arm
+            artefact: linux-arm64
+            experimental: true
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libjack-jackd2-dev \
+            libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libglu1-mesa-dev mesa-common-dev \
+            libcurl4-openssl-dev
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Run engine tests
+        if: ${{ ! matrix.skip_tests }}
+        shell: bash
+        run: |
+          BIN=$(find build -type f \( -name 'SimpleCueTests' -o -name 'SimpleCueTests.exe' \) | head -1)
+          echo "running $BIN"
+          "$BIN"
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd build/SimpleCue_artefacts/Release
+          cp "$GITHUB_WORKSPACE/README.md" "$GITHUB_WORKSPACE/LICENSE" .
+          # ditto keeps the bundle's symlinks and resource forks intact; plain zip does not.
+          ditto -c -k --sequesterRsrc --keepParent "SimpleCue.app" "$GITHUB_WORKSPACE/simplecue-${{ matrix.artefact }}.zip"
+          zip -j "$GITHUB_WORKSPACE/simplecue-${{ matrix.artefact }}.zip" README.md LICENSE
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dir = "build/SimpleCue_artefacts/Release"
+          Copy-Item README.md, LICENSE $dir
+          Compress-Archive -Path "$dir/*" -DestinationPath "simplecue-${{ matrix.artefact }}.zip"
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd build/SimpleCue_artefacts/Release
+          cp "$GITHUB_WORKSPACE/README.md" "$GITHUB_WORKSPACE/LICENSE" .
+          tar czf "$GITHUB_WORKSPACE/simplecue-${{ matrix.artefact }}.tar.gz" SimpleCue README.md LICENSE
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: simplecue-${{ matrix.artefact }}
+          path: |
+            simplecue-*.zip
+            simplecue-*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    # Runs even if an experimental platform dropped out, so the rest still ship.
+    if: always()
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefacts
+          merge-multiple: true
+
+      - name: List what we have
+        run: ls -la artefacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          draft: false
+          generate_release_notes: true
+          files: |
+            artefacts/simplecue-*.zip
+            artefacts/simplecue-*.tar.gz
+          body: |
+            Builds are unsigned.
+
+            **macOS** — the app is not notarised, so Gatekeeper will refuse it on first
+            open. Either right-click the app and choose Open, or clear the quarantine flag:
+
+            ```
+            xattr -dr com.apple.quarantine "/Applications/SimpleCue.app"
+            ```
+
+            **Windows** — SmartScreen will warn on first run: More info, then Run anyway.
+            ASIO is not included, because Steinberg's licence forbids redistributing the
+            SDK; these builds have WASAPI (shared and exclusive) and DirectSound. To get
+            ASIO, build from source with `-DSIMPLECUE_ASIO_SDK_PATH=<path to the SDK>`.
+
+            **Linux** — built against glibc 2.35 (Ubuntu 22.04) with ALSA and JACK. PipeWire
+            works through its ALSA and JACK compatibility layers.
+
+            No MIDI, lighting or streaming hardware has been connected to this software yet.
+            See the README for what is and is not verified.

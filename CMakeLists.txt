@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(CuePlayer VERSION 0.1.0 LANGUAGES C CXX)
+project(SimpleCue VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,11 +16,11 @@ endif()
 # The ASIO SDK licence forbids redistribution, so it is never vendored here. Download it
 # from https://www.steinberg.net/developers/ and point CMake at the unpacked folder:
 #
-#     cmake -B build -DCUEPLAYER_ASIO_SDK_PATH=C:/SDKs/asiosdk_2.3.3
+#     cmake -B build -DSIMPLECUE_ASIO_SDK_PATH=C:/SDKs/asiosdk_2.3.3
 #
 # Without it, Windows builds still get WASAPI (shared + exclusive) and DirectSound.
 # --------------------------------------------------------------------------------------
-set(CUEPLAYER_ASIO_SDK_PATH "" CACHE PATH "Path to the unpacked Steinberg ASIO SDK (Windows only)")
+set(SIMPLECUE_ASIO_SDK_PATH "" CACHE PATH "Path to the unpacked Steinberg ASIO SDK (Windows only)")
 
 include(FetchContent)
 FetchContent_Declare(
@@ -31,21 +31,22 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(JUCE)
 
-juce_add_gui_app(CuePlayer
+juce_add_gui_app(SimpleCue
     COMPANY_NAME "Allan Sargeant"
-    BUNDLE_ID "com.allansargeant.cueplayer"
-    PRODUCT_NAME "Cue Player"
+    BUNDLE_ID "com.allansargeant.simplecue"
+    PRODUCT_NAME "SimpleCue"
     VERSION ${PROJECT_VERSION}
     NEEDS_CURL FALSE
     NEEDS_WEB_BROWSER FALSE
 )
 
-juce_generate_juce_header(CuePlayer)
+juce_generate_juce_header(SimpleCue)
 
-target_sources(CuePlayer
+target_sources(SimpleCue
     PRIVATE
         Source/Main.cpp
         Source/App/MainComponent.cpp
+        Source/App/ScreenshotMode.cpp
 
         Source/Model/Cue.cpp
         Source/Model/CueList.cpp
@@ -76,14 +77,14 @@ target_sources(CuePlayer
         Source/GUI/ControlSetupWindow.cpp
 )
 
-target_include_directories(CuePlayer PRIVATE Source)
+target_include_directories(SimpleCue PRIVATE Source)
 
-target_compile_definitions(CuePlayer
+target_compile_definitions(SimpleCue
     PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
-        JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:CuePlayer,JUCE_PRODUCT_NAME>"
-        JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:CuePlayer,JUCE_VERSION>"
+        JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:SimpleCue,JUCE_PRODUCT_NAME>"
+        JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:SimpleCue,JUCE_VERSION>"
         JUCE_DISPLAY_SPLASH_SCREEN=0
         JUCE_MODAL_LOOPS_PERMITTED=0
 )
@@ -94,61 +95,61 @@ target_compile_definitions(CuePlayer
 if(WIN32)
     # WASAPI shared and exclusive (exclusive is the low-latency path), plus DirectSound
     # as the fallback for older or unusual drivers. ASIO is handled separately below.
-    target_compile_definitions(CuePlayer PRIVATE
+    target_compile_definitions(SimpleCue PRIVATE
         JUCE_WASAPI=1
         JUCE_WASAPI_EXCLUSIVE=1
         JUCE_DIRECTSOUND=1)
 elseif(APPLE)
     # CoreAudio is always compiled in by JUCE on macOS; nothing to switch on.
     # JACK is available on macOS too, but only if the user has installed its headers.
-    find_path(CUEPLAYER_JACK_INCLUDE_DIR jack/jack.h
+    find_path(SIMPLECUE_JACK_INCLUDE_DIR jack/jack.h
               PATHS /usr/local/include /opt/homebrew/include /usr/include)
 
-    if(CUEPLAYER_JACK_INCLUDE_DIR)
-        message(STATUS "Cue Player: JACK support enabled (${CUEPLAYER_JACK_INCLUDE_DIR})")
-        target_compile_definitions(CuePlayer PRIVATE JUCE_JACK=1)
-        target_include_directories(CuePlayer PRIVATE ${CUEPLAYER_JACK_INCLUDE_DIR})
+    if(SIMPLECUE_JACK_INCLUDE_DIR)
+        message(STATUS "SimpleCue: JACK support enabled (${SIMPLECUE_JACK_INCLUDE_DIR})")
+        target_compile_definitions(SimpleCue PRIVATE JUCE_JACK=1)
+        target_include_directories(SimpleCue PRIVATE ${SIMPLECUE_JACK_INCLUDE_DIR})
     endif()
 else()
     # Linux. ALSA is the baseline; JACK covers pro audio setups. PipeWire needs neither
     # of its own — it is reached through its ALSA and JACK compatibility layers, and
     # appears there as an ordinary device.
-    target_compile_definitions(CuePlayer PRIVATE JUCE_ALSA=1)
+    target_compile_definitions(SimpleCue PRIVATE JUCE_ALSA=1)
 
-    find_path(CUEPLAYER_JACK_INCLUDE_DIR jack/jack.h PATHS /usr/include /usr/local/include)
+    find_path(SIMPLECUE_JACK_INCLUDE_DIR jack/jack.h PATHS /usr/include /usr/local/include)
 
-    if(CUEPLAYER_JACK_INCLUDE_DIR)
-        message(STATUS "Cue Player: JACK support enabled")
-        target_compile_definitions(CuePlayer PRIVATE JUCE_JACK=1)
-        target_include_directories(CuePlayer PRIVATE ${CUEPLAYER_JACK_INCLUDE_DIR})
+    if(SIMPLECUE_JACK_INCLUDE_DIR)
+        message(STATUS "SimpleCue: JACK support enabled")
+        target_compile_definitions(SimpleCue PRIVATE JUCE_JACK=1)
+        target_include_directories(SimpleCue PRIVATE ${SIMPLECUE_JACK_INCLUDE_DIR})
     else()
-        message(STATUS "Cue Player: JACK headers not found (install libjack-jackd2-dev "
+        message(STATUS "SimpleCue: JACK headers not found (install libjack-jackd2-dev "
                        "or pipewire-jack headers to enable it). ALSA remains available.")
     endif()
 endif()
 
 # ---- ASIO ---------------------------------------------------------------------------
-if(WIN32 AND CUEPLAYER_ASIO_SDK_PATH)
-    if(EXISTS "${CUEPLAYER_ASIO_SDK_PATH}/common/iasiodrv.h")
-        message(STATUS "Cue Player: ASIO enabled (SDK at ${CUEPLAYER_ASIO_SDK_PATH})")
-        target_compile_definitions(CuePlayer PRIVATE JUCE_ASIO=1)
-        target_include_directories(CuePlayer PRIVATE "${CUEPLAYER_ASIO_SDK_PATH}/common")
+if(WIN32 AND SIMPLECUE_ASIO_SDK_PATH)
+    if(EXISTS "${SIMPLECUE_ASIO_SDK_PATH}/common/iasiodrv.h")
+        message(STATUS "SimpleCue: ASIO enabled (SDK at ${SIMPLECUE_ASIO_SDK_PATH})")
+        target_compile_definitions(SimpleCue PRIVATE JUCE_ASIO=1)
+        target_include_directories(SimpleCue PRIVATE "${SIMPLECUE_ASIO_SDK_PATH}/common")
     else()
         message(FATAL_ERROR
-            "CUEPLAYER_ASIO_SDK_PATH is set to '${CUEPLAYER_ASIO_SDK_PATH}' but "
+            "SIMPLECUE_ASIO_SDK_PATH is set to '${SIMPLECUE_ASIO_SDK_PATH}' but "
             "common/iasiodrv.h was not found there. Point it at the unpacked ASIO SDK root.")
     endif()
 elseif(WIN32)
-    message(STATUS "Cue Player: ASIO disabled (set CUEPLAYER_ASIO_SDK_PATH to enable). "
+    message(STATUS "SimpleCue: ASIO disabled (set SIMPLECUE_ASIO_SDK_PATH to enable). "
                    "WASAPI and DirectSound remain available.")
 endif()
 
 # ---- Engine tests -------------------------------------------------------------------
 # Console harness that drives the real CueVoice with a ramp signal and checks positions,
-# fades, loops and vamps numerically. Run with: ./build/CuePlayerTests
-juce_add_console_app(CuePlayerTests PRODUCT_NAME "CuePlayerTests")
+# fades, loops and vamps numerically. Run with: ./build/SimpleCueTests
+juce_add_console_app(SimpleCueTests PRODUCT_NAME "SimpleCueTests")
 
-target_sources(CuePlayerTests
+target_sources(SimpleCueTests
     PRIVATE
         Tests/EngineTests.cpp
         Tests/ControlTests.cpp
@@ -165,15 +166,15 @@ target_sources(CuePlayerTests
         Source/Audio/CueVoice.cpp
         Source/Audio/SampleSource.cpp)
 
-target_include_directories(CuePlayerTests PRIVATE Source Tests)
+target_include_directories(SimpleCueTests PRIVATE Source Tests)
 
-target_compile_definitions(CuePlayerTests
+target_compile_definitions(SimpleCueTests
     PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_STANDALONE_APPLICATION=1)
 
-target_link_libraries(CuePlayerTests
+target_link_libraries(SimpleCueTests
     PRIVATE
         juce::juce_audio_formats
         juce::juce_audio_basics
@@ -185,9 +186,9 @@ target_link_libraries(CuePlayerTests
         juce::juce_recommended_warning_flags)
 
 enable_testing()
-add_test(NAME engine COMMAND CuePlayerTests)
+add_test(NAME engine COMMAND SimpleCueTests)
 
-target_link_libraries(CuePlayer
+target_link_libraries(SimpleCue
     PRIVATE
         juce::juce_audio_utils
         juce::juce_audio_devices

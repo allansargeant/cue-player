@@ -1,6 +1,6 @@
 # Control reference
 
-Everything the outside world can do to Cue Player, and everything it sends back. Configure
+Everything the outside world can do to SimpleCue, and everything it sends back. Configure
 it all in **Audio → Control setup**, which also carries a live monitor of incoming traffic —
 when a desk is not firing a cue, the first question is always "is anything arriving at
 all?", and that panel is the answer.

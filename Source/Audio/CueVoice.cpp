@@ -56,7 +56,7 @@ void CueVoice::triggerStart() noexcept
 
     reportedPosition.store (position, std::memory_order_relaxed);
     reportedSounded.store (0, std::memory_order_relaxed);
-    vampingNow.store (vampActive, std::memory_order_relaxed);
+    vampingNow.store (isCirclingVamp(), std::memory_order_relaxed);
     vampPasses.store (0, std::memory_order_relaxed);
     playPasses.store (0, std::memory_order_relaxed);
     reportedGain.store (0.0f, std::memory_order_relaxed);
@@ -118,6 +118,14 @@ void CueVoice::scheduleStop (juce::int64 atSoundedSample, juce::int64 fadeSample
     pendingStopAt    = atSoundedSample;
     pendingStopFade  = juce::jmax ((juce::int64) 0, fadeSamples);
     pendingStopShape = shape;
+}
+
+bool CueVoice::isCirclingVamp() const noexcept
+{
+    // Armed is not the same as circling. A vamp is armed the moment the cue starts, but the
+    // play head may be a minute of audio away from the vamp in point, and reporting "VAMP"
+    // for that whole minute would tell the operator the cue is holding when it is not.
+    return vampActive && position >= spec.vampStart;
 }
 
 void CueVoice::finish() noexcept
@@ -289,7 +297,7 @@ void CueVoice::render (juce::AudioBuffer<float>& output,
 
     reportedPosition.store (position, std::memory_order_relaxed);
     reportedSounded.store (soundedSamples, std::memory_order_relaxed);
-    vampingNow.store (vampActive, std::memory_order_relaxed);
+    vampingNow.store (isCirclingVamp(), std::memory_order_relaxed);
 }
 
 void CueVoice::renderRun (juce::AudioBuffer<float>& output,

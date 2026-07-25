@@ -280,6 +280,35 @@ void testVamp (const SampleSource& source)
         check (voice.getVampPassCount() >= 10, "vamp pass counter advances");
     }
 
+    // --- "vamping" means circling, not merely armed --------------------------
+    {
+        CueVoice voice;
+        voice.prepare (testRate, 256);
+
+        auto spec = baseSpec (source, 2);
+        spec.regionStart = 0;
+        spec.regionEnd   = 48000;
+        spec.vampEnabled = true;
+        spec.vampStart   = 20000;
+        spec.vampEnd     = 24000;
+
+        voice.setSpec (spec);
+        voice.triggerStart();
+
+        // The vamp is armed from the first sample, but the play head is nowhere near it.
+        // Reporting VAMP here would tell the operator the cue is holding when it is not.
+        check (! voice.isVamping(), "a vamp that has not been reached yet is not reported");
+
+        juce::AudioBuffer<float> warmup (2, 10000);
+        warmup.clear();
+        voice.render (warmup, nullptr, 0, 10000);
+        check (! voice.isVamping(), "still not vamping half way to the vamp in point");
+
+        warmup.clear();
+        voice.render (warmup, nullptr, 0, 10000);   // now at sample 20000
+        check (voice.isVamping(), "reports vamping once the play head reaches the region");
+    }
+
     // --- release at end of pass ----------------------------------------------
     {
         CueVoice voice;
@@ -786,7 +815,7 @@ int main()
     formats.registerBasicFormats();
 
     auto directory = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                         .getChildFile ("cue-player-tests");
+                         .getChildFile ("simplecue-tests");
     directory.createDirectory();
 
     const auto stereoFile = writeRampFile (directory, 480000, 2);   // 10 s
@@ -800,7 +829,7 @@ int main()
         return 1;
     }
 
-    std::printf ("\nCue Player engine tests\n=======================\n");
+    std::printf ("\nSimpleCue engine tests\n======================\n");
 
     testInAndOutPoints (*source);
     testPreWait (*source);

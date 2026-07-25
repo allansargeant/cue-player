@@ -53,7 +53,7 @@ jobs:
         run: |
           # The binary lands in a per-config folder on multi-config generators and a flat
           # one otherwise, so find it rather than guessing. Match the exact names: a
-          # trailing wildcard also picks up JUCE's generated CuePlayerTests.entitlements.
-          BIN=$(find build -type f \( -name 'CuePlayerTests' -o -name 'CuePlayerTests.exe' \) | head -1)
+          # trailing wildcard also picks up JUCE's generated SimpleCueTests.entitlements.
+          BIN=$(find build -type f \( -name 'SimpleCueTests' -o -name 'SimpleCueTests.exe' \) | head -1)
           echo "running $BIN"
           "$BIN"
