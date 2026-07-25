@@ -1,5 +1,7 @@
 # Cue Player
 
+[![ci](https://github.com/allansargeant/cue-player/actions/workflows/ci.yml/badge.svg)](https://github.com/allansargeant/cue-player/actions/workflows/ci.yml)
+
 > **AI-assisted project.** This codebase was created with [Claude Code](https://claude.com/claude-code)
 > (Anthropic), directed and reviewed by a human author. The playback engine is verified
 > numerically — a console harness pushes a ramp signal, whose sample values encode their own
