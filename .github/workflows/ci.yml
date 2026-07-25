@@ -52,7 +52,8 @@ jobs:
         shell: bash
         run: |
           # The binary lands in a per-config folder on multi-config generators and a flat
-          # one otherwise, so find it rather than guessing.
-          BIN=$(find build -type f -name 'CuePlayerTests*' ! -name '*.pdb' ! -name '*.dSYM' | head -1)
+          # one otherwise, so find it rather than guessing. Match the exact names: a
+          # trailing wildcard also picks up JUCE's generated CuePlayerTests.entitlements.
+          BIN=$(find build -type f \( -name 'CuePlayerTests' -o -name 'CuePlayerTests.exe' \) | head -1)
           echo "running $BIN"
           "$BIN"
