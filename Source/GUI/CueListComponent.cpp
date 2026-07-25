@@ -47,14 +47,58 @@ void CueListComponent::changeListenerCallback (juce::ChangeBroadcaster*)
     refresh();
 }
 
+bool CueListComponent::isExpanded (const Cue& cue) const
+{
+    if (manuallyExpanded.count (cue.id) > 0)
+        return true;
+
+    // The standby cue always opens, so the operator can see what the next few GOs will do
+    // before committing to the first of them - not only once they are already part-way
+    // through and wondering what happens next.
+    if (const auto* standby = cueList.getStandbyCue(); standby != nullptr && standby->id == cue.id)
+        return true;
+
+    return false;
+}
+
+void CueListComponent::toggleExpansion (const Cue& cue)
+{
+    if (manuallyExpanded.count (cue.id) > 0)
+        manuallyExpanded.erase (cue.id);
+    else
+        manuallyExpanded.insert (cue.id);
+
+    rebuildRows();
+    table.updateContent();
+    table.repaint();
+}
+
+void CueListComponent::rebuildRows()
+{
+    displayRows.clear();
+
+    for (int i = 0; i < cueList.size(); ++i)
+    {
+        const auto* cue = cueList.get (i);
+
+        if (cue == nullptr)
+            continue;
+
+        displayRows.push_back ({ i, -1 });
+
+        // A cue with a single step has no lifecycle worth showing: Play is the whole story.
+        const auto steps = cueList.stepsFor (i);
+
+        if (steps.size() > 1 && isExpanded (*cue))
+            for (int s = 0; s < (int) steps.size(); ++s)
+                displayRows.push_back ({ i, s });
+    }
+}
+
 void CueListComponent::refresh()
 {
     activeSnapshot = audioEngine.getActiveCues();
-
-    const auto selected = cueList.getSelectedIndex();
-
-    if (table.getSelectedRow() != selected)
-        table.selectRow (selected, true, true);
+    rebuildRows();
 
     table.updateContent();
     table.repaint();
@@ -62,14 +106,27 @@ void CueListComponent::refresh()
 
 void CueListComponent::selectRow (int index)
 {
-    table.selectRow (index, false, true);
-    table.scrollToEnsureRowIsOnscreen (index);
+    for (int row = 0; row < (int) displayRows.size(); ++row)
+    {
+        if (displayRows[(size_t) row].cueIndex == index && displayRows[(size_t) row].isHeader())
+        {
+            table.selectRow (row, false, true);
+            table.scrollToEnsureRowIsOnscreen (row);
+            return;
+        }
+    }
+}
+
+juce::Rectangle<int> CueListComponent::getTwistyBounds (int width, int height) const
+{
+    juce::ignoreUnused (width);
+    return juce::Rectangle<int> (4, (height - 12) / 2, 12, 12);
 }
 
 //==============================================================================
 int CueListComponent::getNumRows()
 {
-    return cueList.size();
+    return (int) displayRows.size();
 }
 
 CueListComponent::Status CueListComponent::statusFor (const Cue& cue) const
@@ -95,31 +152,101 @@ CueListComponent::Status CueListComponent::statusFor (const Cue& cue) const
 
 void CueListComponent::paintRowBackground (juce::Graphics& g, int row, int width, int height, bool rowIsSelected)
 {
-    const auto isStandby = (row == cueList.getStandbyIndex());
+    if (! juce::isPositiveAndBelow (row, (int) displayRows.size()))
+        return;
 
-    g.fillAll (row % 2 == 0 ? colours::panel : colours::panel.brighter (0.02f));
+    const auto& display = displayRows[(size_t) row];
+    const auto numSteps = (int) cueList.stepsFor (display.cueIndex).size();
+    const auto expanded = numSteps > 1 && ! display.isHeader();
 
-    if (rowIsSelected)
+    // Step rows sit in a slightly recessed band so a cue and its lifecycle read as one
+    // block rather than as a run of unrelated lines.
+    if (display.isHeader())
+        g.fillAll (display.cueIndex % 2 == 0 ? colours::panel : colours::panel.brighter (0.02f));
+    else
+        g.fillAll (colours::background.brighter (0.02f));
+
+    if (rowIsSelected && display.isHeader())
         g.fillAll (colours::panelLight);
 
-    if (isStandby)
+    // The standby marker goes on the exact row GO will act on: the cue header when the
+    // lifecycle is collapsed or at its start, otherwise the step itself.
+    const auto standbyCue = cueList.getStandbyIndex();
+    const auto standbyStep = cueList.getStandbyStep();
+    const auto stepsVisible = numSteps > 1
+                           && std::any_of (displayRows.begin(), displayRows.end(),
+                                           [&display] (const DisplayRow& r)
+                                           { return r.cueIndex == display.cueIndex && ! r.isHeader(); });
+
+    const auto isStandbyRow = display.cueIndex == standbyCue
+                           && (stepsVisible ? (display.stepIndex == standbyStep)
+                                            : display.isHeader());
+
+    if (isStandbyRow)
     {
-        // A left bar rather than a full highlight: it survives being layered under the
-        // selection and under a playing row without any of them becoming unreadable.
         g.setColour (colours::standby);
         g.fillRect (0, 0, 4, height);
     }
 
-    g.setColour (colours::outline.withAlpha (0.5f));
+    juce::ignoreUnused (expanded);
+
+    g.setColour (colours::outline.withAlpha (display.isHeader() ? 0.5f : 0.2f));
     g.drawHorizontalLine (height - 1, 0.0f, (float) width);
 }
 
 void CueListComponent::paintCell (juce::Graphics& g, int row, int columnId, int width, int height, bool)
 {
-    const auto* cue = cueList.get (row);
+    if (! juce::isPositiveAndBelow (row, (int) displayRows.size()))
+        return;
+
+    const auto& display = displayRows[(size_t) row];
+    const auto* cue = cueList.get (display.cueIndex);
 
     if (cue == nullptr)
         return;
+
+    // --- a lifecycle step -----------------------------------------------------
+    if (! display.isHeader())
+    {
+        const auto steps = cueList.stepsFor (display.cueIndex);
+
+        if (! juce::isPositiveAndBelow (display.stepIndex, (int) steps.size()))
+            return;
+
+        const auto& step = steps[(size_t) display.stepIndex];
+        const auto stepArea = juce::Rectangle<int> (0, 0, width, height).reduced (6, 0);
+
+        const auto stepColour = step.type == CueStepType::play   ? colours::go
+                              : step.type == CueStepType::devamp ? colours::vamp
+                                                                 : colours::stop;
+
+        if (columnId == columnNumber)
+        {
+            // Indented and drawn as a branch, so the step is visibly part of the cue above.
+            g.setColour (colours::outline);
+            g.drawLine (24.0f, 0.0f, 24.0f, (float) height * 0.5f, 1.0f);
+            g.drawLine (24.0f, (float) height * 0.5f, 34.0f, (float) height * 0.5f, 1.0f);
+
+            auto dot = juce::Rectangle<int> (38, (height - 8) / 2, 8, 8);
+            g.setColour (stepColour);
+            g.fillEllipse (dot.toFloat());
+        }
+        else if (columnId == columnName)
+        {
+            g.setColour (stepColour);
+            g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+            g.drawText (step.label, stepArea.withTrimmedLeft (10),
+                        juce::Justification::centredLeft, true);
+        }
+        else if (columnId == columnFile)
+        {
+            g.setColour (colours::textDim);
+            g.setFont (juce::FontOptions (11.5f));
+            g.drawText (step.detail, stepArea, juce::Justification::centredLeft, true);
+        }
+
+        return;
+    }
 
     const auto area = juce::Rectangle<int> (0, 0, width, height).reduced (6, 0);
     g.setFont (juce::FontOptions (12.5f));
@@ -144,9 +271,37 @@ void CueListComponent::paintCell (juce::Graphics& g, int row, int columnId, int 
         }
 
         case columnNumber:
+        {
+            auto numberArea = area;
+
+            if (cueList.stepsFor (display.cueIndex).size() > 1)
+            {
+                const auto twisty = getTwistyBounds (width, height);
+                juce::Path triangle;
+
+                if (isExpanded (*cue))
+                {
+                    triangle.addTriangle ((float) twisty.getX(), (float) twisty.getY() + 2.0f,
+                                          (float) twisty.getRight(), (float) twisty.getY() + 2.0f,
+                                          (float) twisty.getCentreX(), (float) twisty.getBottom() - 1.0f);
+                }
+                else
+                {
+                    triangle.addTriangle ((float) twisty.getX() + 2.0f, (float) twisty.getY(),
+                                          (float) twisty.getX() + 2.0f, (float) twisty.getBottom(),
+                                          (float) twisty.getRight() - 1.0f, (float) twisty.getCentreY());
+                }
+
+                g.setColour (colours::textDim);
+                g.fillPath (triangle);
+                numberArea = numberArea.withTrimmedLeft (14);
+            }
+
+            g.setColour (colours::text);
             g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
-            g.drawText (cue->number, area, juce::Justification::centredLeft, true);
+            g.drawText (cue->number, numberArea, juce::Justification::centredLeft, true);
             break;
+        }
 
         case columnName:
             g.drawText (cue->name.isNotEmpty() ? cue->name : juce::String ("(untitled)"),
@@ -270,42 +425,77 @@ juce::String CueListComponent::describeLink (const Cue& cue) const
 }
 
 //==============================================================================
-void CueListComponent::cellClicked (int row, int, const juce::MouseEvent&)
+void CueListComponent::cellClicked (int row, int columnId, const juce::MouseEvent& e)
 {
-    cueList.setSelectedIndex (row);
+    if (! juce::isPositiveAndBelow (row, (int) displayRows.size()))
+        return;
+
+    const auto& display = displayRows[(size_t) row];
+    const auto* cue = cueList.get (display.cueIndex);
+
+    if (cue == nullptr)
+        return;
+
+    // Clicking a step stands that step by, so an operator can jump straight to "release
+    // this vamp" without walking there.
+    if (! display.isHeader())
+    {
+        cueList.setStandbyPosition (display.cueIndex, display.stepIndex);
+        refresh();
+        return;
+    }
+
+    if (columnId == columnNumber && cueList.stepsFor (display.cueIndex).size() > 1
+        && getTwistyBounds (table.getHeader().getColumnWidth (columnNumber),
+                            table.getRowHeight()).expanded (3, 3).contains (e.x, e.y))
+    {
+        toggleExpansion (*cue);
+        return;
+    }
+
+    cueList.setSelectedIndex (display.cueIndex);
 
     if (onSelectionChanged != nullptr)
-        onSelectionChanged (row);
+        onSelectionChanged (display.cueIndex);
 }
 
 void CueListComponent::cellDoubleClicked (int row, int columnId, const juce::MouseEvent&)
 {
-    const auto* cue = cueList.get (row);
+    if (! juce::isPositiveAndBelow (row, (int) displayRows.size()))
+        return;
 
-    if (cue == nullptr)
+    const auto& display = displayRows[(size_t) row];
+    const auto* cue = cueList.get (display.cueIndex);
+
+    if (cue == nullptr || ! display.isHeader())
         return;
 
     if (columnId == columnFile && cue->type == CueType::audioFile)
     {
         if (onFileRequested != nullptr)
-            onFileRequested (row);
+            onFileRequested (display.cueIndex);
 
         return;
     }
 
     if (onCueTriggered != nullptr)
-        onCueTriggered (row);
+        onCueTriggered (display.cueIndex);
 }
 
 void CueListComponent::selectedRowsChanged (int lastRowSelected)
 {
-    if (lastRowSelected < 0 || lastRowSelected == cueList.getSelectedIndex())
+    if (! juce::isPositiveAndBelow (lastRowSelected, (int) displayRows.size()))
         return;
 
-    cueList.setSelectedIndex (lastRowSelected);
+    const auto& display = displayRows[(size_t) lastRowSelected];
+
+    if (display.cueIndex == cueList.getSelectedIndex())
+        return;
+
+    cueList.setSelectedIndex (display.cueIndex);
 
     if (onSelectionChanged != nullptr)
-        onSelectionChanged (lastRowSelected);
+        onSelectionChanged (display.cueIndex);
 }
 
 void CueListComponent::backgroundClicked (const juce::MouseEvent&) {}

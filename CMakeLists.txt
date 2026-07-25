@@ -59,6 +59,7 @@ target_sources(SimpleCue
         Source/Model/CueList.cpp
         Source/Model/Show.cpp
         Source/Model/FadeCurve.cpp
+        Source/Model/CueStep.cpp
         Source/Model/ControlMessage.cpp
         Source/Model/StreamingSettings.cpp
 
@@ -166,6 +167,7 @@ target_sources(SimpleCueTests
         Source/Model/CueList.cpp
         Source/Model/Show.cpp
         Source/Model/FadeCurve.cpp
+        Source/Model/CueStep.cpp
         Source/Model/ControlMessage.cpp
         Source/Model/StreamingSettings.cpp
         Source/Control/ControlSettings.cpp

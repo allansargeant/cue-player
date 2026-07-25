@@ -16,6 +16,8 @@
 #include "Control/OscControl.h"
 #include "GUI/LookAndFeel.h"
 #include "Model/Cue.h"
+#include "Model/CueList.h"
+#include "Model/CueStep.h"
 #include "Model/Show.h"
 #include "Model/StreamingSettings.h"
 #include "Model/ControlMessage.h"
@@ -1059,6 +1061,186 @@ void testStreamingSettings()
     check (cue.isPlayable(), "a uri is all a streaming cue needs of its own");
 }
 
+
+//==============================================================================
+void testCueSteps()
+{
+    cptest::section ("cue lifecycle steps");
+
+    // A plain one-shot needs one GO and no more. Giving it an End step would double the
+    // number of presses in a show of stingers, which is the whole reason End is automatic.
+    {
+        Cue cue;
+        cue.fileDuration = 10.0;
+        const auto steps = buildCueSteps (cue);
+
+        check (steps.size() == 1, "a finite one-shot has a single Play step");
+        check (steps[0].type == CueStepType::play, "and that step is Play");
+    }
+
+    // A cue that cannot end by itself must be stoppable from the GO sequence.
+    {
+        Cue cue;
+        cue.fileDuration = 10.0;
+        cue.loopEnabled = true;
+        cue.loopCount = 0;
+        const auto steps = buildCueSteps (cue);
+
+        check (steps.size() == 2, "an infinite loop gains an End step");
+        check (steps[1].type == CueStepType::end, "the extra step is End");
+    }
+
+    {
+        Cue cue;
+        cue.type = CueType::streaming;
+        cue.streaming.uri = "spotify:playlist:1";
+        const auto steps = buildCueSteps (cue);
+
+        check (steps.size() == 2, "a streaming cue gains an End step");
+        check (steps[1].type == CueStepType::end, "the extra step is End");
+    }
+
+    // Play, then release the hold, then end it.
+    {
+        Cue cue;
+        cue.fileDuration = 60.0;
+        cue.vampEnabled = true;
+        cue.vampStart = 10.0;
+        cue.vampEnd = 20.0;
+
+        const auto steps = buildCueSteps (cue);
+
+        check (steps.size() == 3, "a vamped cue has play, devamp and end");
+        check (steps[0].type == CueStepType::play, "first step is Play");
+        check (steps[1].type == CueStepType::devamp, "second step is Devamp");
+        check (steps[2].type == CueStepType::end, "third step is End");
+        check (steps[1].detail.isNotEmpty(), "the devamp step says which region it releases");
+    }
+
+    // A vamp whose markers are unusable is not a vamp, so it earns no devamp step.
+    {
+        Cue cue;
+        cue.fileDuration = 60.0;
+        cue.vampEnabled = true;
+        cue.vampStart = 30.0;
+        cue.vampEnd = 20.0;      // backwards
+
+        const auto steps = buildCueSteps (cue);
+
+        for (const auto& step : steps)
+            check (step.type != CueStepType::devamp, "an unusable vamp gets no devamp step");
+    }
+
+    // Explicit overrides.
+    {
+        Cue cue;
+        cue.fileDuration = 10.0;
+        cue.endStepMode = EndStepMode::always;
+        check (buildCueSteps (cue).size() == 2, "endStepMode always forces an End step");
+
+        cue.endStepMode = EndStepMode::never;
+        cue.loopEnabled = true;
+        cue.loopCount = 0;
+        const auto steps = buildCueSteps (cue);
+
+        for (const auto& step : steps)
+            check (step.type != CueStepType::end,
+                   "endStepMode never suppresses End even on an endless cue");
+    }
+
+    // The End step's description has to match what it will actually do.
+    {
+        Cue cue;
+        cue.fileDuration = 10.0;
+        cue.endStepMode = EndStepMode::always;
+        cue.endAction = EndAction::hardStop;
+        check (buildCueSteps (cue).back().detail.containsIgnoreCase ("hard"),
+               "a hard stop says so");
+
+        cue.endAction = EndAction::fadeOut;
+        cue.endFadeTime = 4.0;
+        check (buildCueSteps (cue).back().detail.contains ("4.0"),
+               "a fading end shows its fade time");
+    }
+}
+
+void testStandbyWalksTheLifecycle()
+{
+    cptest::section ("standby walks the lifecycle");
+
+    CueList list;
+
+    Cue simple;
+    simple.number = "1";
+    simple.fileDuration = 10.0;
+
+    Cue vamped;
+    vamped.number = "2";
+    vamped.fileDuration = 60.0;
+    vamped.vampEnabled = true;
+    vamped.vampStart = 10.0;
+    vamped.vampEnd = 20.0;
+
+    Cue last;
+    last.number = "3";
+    last.fileDuration = 10.0;
+
+    const auto vampedId = vamped.id;
+
+    list.insert (simple);
+    list.insert (vamped);
+    list.insert (last);
+    list.setStandbyIndex (0);
+
+    check (list.getStandbyIndex() == 0 && list.getStandbyStep() == 0, "standby starts at the top");
+    check (list.stepsFor (0).size() == 1, "the first cue has one step");
+
+    // A single-step cue hands straight on to the next.
+    list.advanceStandby();
+    check (list.getStandbyIndex() == 1 && list.getStandbyStep() == 0,
+           "a one-step cue advances to the next cue");
+
+    // The vamped cue is walked step by step before anything moves on.
+    check (list.stepsFor (1).size() == 3, "the vamped cue has three steps");
+
+    list.advanceStandby();
+    check (list.getStandbyIndex() == 1 && list.getStandbyStep() == 1,
+           "the second GO moves to the devamp step, not to the next cue");
+
+    const auto devampStep = list.getStandbyStepInfo();
+    check (devampStep.has_value() && devampStep->type == CueStepType::devamp,
+           "and that step really is the devamp");
+
+    list.advanceStandby();
+    check (list.getStandbyIndex() == 1 && list.getStandbyStep() == 2, "then the end step");
+
+    list.advanceStandby();
+    check (list.getStandbyIndex() == 2 && list.getStandbyStep() == 0,
+           "only then does it move on to the next cue");
+
+    // The end of the list is a wall, not a wrap: a stray GO must not restart the show.
+    list.advanceStandby();
+    list.advanceStandby();
+    check (list.getStandbyIndex() == 2, "standby stops at the last cue");
+
+    // Editing a cue can remove the step standby is sitting on.
+    list.setStandbyPosition (1, 2);
+    check (list.getStandbyStep() == 2, "standby can be placed on the end step");
+
+    list.modifyByID (vampedId, [] (Cue& c) { c.vampEnabled = false; });
+    check (list.getStandbyStep() < (int) list.stepsFor (1).size(),
+           "turning the vamp off pulls standby back into range");
+
+    // Jumping straight to a step, which is what clicking one in the list does.
+    list.setStandbyPosition (1, 1);
+    check (list.getStandbyIndex() == 1, "standby can jump to a specific cue");
+    check (list.getStandbyStep() <= 1, "and to a specific step within it");
+
+    // Setting standby by cue always lands on the start of its lifecycle.
+    list.setStandbyIndex (1);
+    check (list.getStandbyStep() == 0, "selecting a cue stands by its first step");
+}
+
 } // namespace
 
 //==============================================================================
@@ -1079,4 +1261,6 @@ void runControlTests()
     testTimecodeParsing();
     testShowDefaults();
     testStreamingSettings();
+    testCueSteps();
+    testStandbyWalksTheLifecycle();
 }

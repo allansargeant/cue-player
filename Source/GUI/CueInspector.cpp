@@ -331,6 +331,37 @@ void CueInspector::buildControls()
     addRow ("On release", vampReleaseBox, 2);
     fileOnly.push_back (&vampReleaseBox);
 
+    // --- End of life ----------------------------------------------------------
+    addSection ("Ending this cue");
+    endSectionIndex = sectionLabels.size() - 1;
+
+    endStepModeBox.addItemList (endStepModeNames(), 1);
+    endStepModeBox.onChange = [this]
+    {
+        editCue ([this] (Cue& c)
+                 { c.endStepMode = (EndStepMode) (endStepModeBox.getSelectedId() - 1); });
+        updateEnablement();
+
+        if (onCueEdited != nullptr)
+            onCueEdited();
+    };
+    addRow ("End step", endStepModeBox, 2);
+
+    endActionBox.addItemList (endActionNames(), 1);
+    endActionBox.onChange = [this]
+    {
+        editCue ([this] (Cue& c) { c.endAction = (EndAction) (endActionBox.getSelectedId() - 1); });
+        updateEnablement();
+    };
+    addRow ("Ends by", endActionBox);
+
+    configureTimeSlider (endFadeSlider, 120.0, " s");
+    endFadeSlider.onValueChange = [this]
+    {
+        editCue ([this] (Cue& c) { c.endFadeTime = endFadeSlider.getValue(); });
+    };
+    addRow ("Fade over", endFadeSlider);
+
     // --- Link -----------------------------------------------------------------
     addSection ("Link to the next cue");
 
@@ -710,6 +741,7 @@ void CueInspector::updateSectionVisibility()
 
     // A control cue has no audio, so it has nothing to route.
     const auto hasAudio = isFile || isStreaming;
+    setSectionVisible (endSectionIndex, hasAudio);
     setSectionVisible (routingSectionIndexForVisibility, hasAudio);
     routingMatrix.setVisible (hasAudio);
 
@@ -788,6 +820,8 @@ void CueInspector::updateEnablement()
     linkDelaySlider.setEnabled (mode == LinkMode::autoContinue || mode == LinkMode::autoFollow);
     linkDurationSlider.setEnabled (mode == LinkMode::crossfade);
     linkShapeBox.setEnabled (mode == LinkMode::crossfade);
+
+    endFadeSlider.setEnabled (cue != nullptr && cue->endAction == EndAction::fadeOut);
 
     auditionButton.setEnabled (cue != nullptr && cue->isPlayable());
 }
@@ -876,6 +910,10 @@ void CueInspector::refresh()
     vampEndSlider.setValue (cue->vampEnd, juce::dontSendNotification);
     vampReleaseBox.setSelectedId (cue->vampRelease == VampRelease::immediately ? 2 : 1,
                                   juce::dontSendNotification);
+
+    endStepModeBox.setSelectedId ((int) cue->endStepMode + 1, juce::dontSendNotification);
+    endActionBox.setSelectedId ((int) cue->endAction + 1, juce::dontSendNotification);
+    endFadeSlider.setValue (cue->endFadeTime, juce::dontSendNotification);
 
     linkModeBox.setSelectedId ((int) cue->link.mode + 1, juce::dontSendNotification);
     linkDelaySlider.setValue (cue->link.delay, juce::dontSendNotification);

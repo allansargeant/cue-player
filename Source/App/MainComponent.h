@@ -80,6 +80,11 @@ private:
     void saveStreamingSettings();
     void publishControlStatus();
 
+    /** Performs whatever the standby step is - play, devamp or end - and moves standby on
+        to the next step of that cue's lifecycle, or to the next cue when it is finished.
+        This is what GO does. */
+    bool fireStandbyStep();
+
     /** Resolves the cue an incoming action refers to, by list position when the transport
         gave one (DMX) and by cue number otherwise. Returns -1 if there is no such cue. */
     int resolveControlTarget (const ControlAction& action) const;

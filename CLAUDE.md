@@ -14,7 +14,8 @@ The internal C++ namespace is still `cp`. It predates the rename to SimpleCue an
 alone deliberately: renaming it touches every file for no user-visible gain.
 
 ## Architecture
-- `Source/Model` — `Cue`, `CueList`, `Show` (JSON `.cueshow`), `FadeCurve`. Message thread only.
+- `Source/Model` — `Cue`, `CueList`, `Show` (JSON `.cueshow`), `FadeCurve`, `CueStep`,
+  `StreamingSettings`. Message thread only.
 - `Source/Audio` — `AudioEngine` (device + voice pool + link scheduling), `CueVoice` (one
   sounding instance), `SampleSource`/`SampleCache` (decode + resample to device rate).
 - `Source/Control` — `ControlHub` (owns the transports, schedules outgoing messages,
@@ -36,6 +37,14 @@ alone deliberately: renaming it touches every file for no user-visible gain.
   It also has ~1% passband gain error — that is the filter, not a bug.
 - **No non-ASCII characters in string literals.** JUCE's `String(const char*)` asserts on
   them and mangles the text. Em dashes in comments are fine; in literals they are not.
+
+## Cue lifecycles
+- A cue's steps are **derived** by `buildCueSteps()`, never stored. Play always; one Devamp
+  per vamp; End only when the cue cannot end by itself (or `endStepMode` forces it). Adding
+  an End step to every cue would double the GOs in a show of one-shot stingers.
+- Standby is a **(cue, step)** pair. `CueList::modify()` re-clamps it, because an edit can
+  remove the step standby is sitting on (turning a vamp off drops its devamp).
+- `MainComponent::fireStandbyStep()` is what GO does — the engine no longer owns sequencing.
 
 ## Rules for the control layer
 - Incoming control arrives on socket/MIDI threads. **Never touch the show from those** —

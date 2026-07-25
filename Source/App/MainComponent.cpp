@@ -183,10 +183,21 @@ void MainComponent::timerCallback()
     const auto& list = show.getCueList();
 
     if (const auto* standby = list.getStandbyCue())
+    {
+        const auto name = standby->name.isNotEmpty() ? standby->name : juce::String ("(untitled)");
+        const auto step = list.getStandbyStepInfo();
+
+        // Naming the step matters when a cue has several: "Storm builds" alone does not
+        // tell the operator whether the next GO starts it, releases it or ends it.
         transportBar.setStandbyText (standby->number,
-                                     standby->name.isNotEmpty() ? standby->name : "(untitled)");
+                                     step.has_value() && list.stepsFor (list.getStandbyIndex()).size() > 1
+                                         ? name + "   -   " + step->label
+                                         : name);
+    }
     else
+    {
         transportBar.setStandbyText ("--", list.isEmpty() ? "No cues" : "End of list");
+    }
 
     juce::StringArray status;
     status.add (show.getTitle() + (show.hasUnsavedChanges() ? " *" : ""));
@@ -677,6 +688,50 @@ void MainComponent::captureScreenshots (const juce::File& outputDir, std::functi
 }
 
 //==============================================================================
+
+bool MainComponent::fireStandbyStep()
+{
+    auto& list = show.getCueList();
+    const auto index = list.getStandbyIndex();
+    const auto* cue = list.get (index);
+
+    if (cue == nullptr)
+        return false;
+
+    const auto steps = list.stepsFor (index);
+    const auto stepIndex = list.getStandbyStep();
+
+    if (! juce::isPositiveAndBelow (stepIndex, (int) steps.size()))
+        return false;
+
+    const auto cueId = cue->id;
+    const auto endAction = cue->endAction;
+    const auto endFade = cue->endFadeTime;
+    bool performed = true;
+
+    switch (steps[(size_t) stepIndex].type)
+    {
+        case CueStepType::play:
+            performed = audioEngine.go (index);
+            break;
+
+        case CueStepType::devamp:
+            audioEngine.releaseVamp (cueId);
+            break;
+
+        case CueStepType::end:
+            audioEngine.stopCue (cueId, endAction == EndAction::hardStop ? 0.0 : endFade);
+            break;
+    }
+
+    // Standby moves on even when the step could not be performed - a missing file should
+    // not wedge the operator on the same step for the rest of the show.
+    list.advanceStandby();
+    cueListComponent.refresh();
+    publishControlStatus();
+    return performed;
+}
+
 void MainComponent::publishControlStatus()
 {
     if (controlHub.onStatusRequested != nullptr)
@@ -736,7 +791,7 @@ void MainComponent::performControlAction (const ControlAction& action)
     switch (action.type)
     {
         case ControlActionType::go:
-            audioEngine.goStandby();
+            fireStandbyStep();
             break;
 
         case ControlActionType::goCue:
@@ -1200,11 +1255,10 @@ bool MainComponent::perform (const InvocationInfo& info)
         case CommandIDs::renumberCues:    renumberCues(); return true;
 
         case CommandIDs::go:
-            if (! audioEngine.goStandby())
+            if (! fireStandbyStep())
                 if (const auto error = audioEngine.getLastError(); error.isNotEmpty())
                     reportError (error);
 
-            cueListComponent.refresh();
             return true;
 
         case CommandIDs::stopAll:     audioEngine.stopAll (2.0); return true;

@@ -107,6 +107,8 @@ private:
     juce::ToggleButton vampToggle { "Vamp a section until released" };
     juce::Slider vampStartSlider, vampEndSlider;
     juce::ComboBox vampReleaseBox;
+    juce::ComboBox endActionBox, endStepModeBox;
+    juce::Slider endFadeSlider;
     juce::ComboBox linkModeBox, linkTargetBox, linkShapeBox;
     juce::Slider linkDelaySlider, linkDurationSlider;
 
@@ -150,6 +152,7 @@ private:
     size_t streamingSectionIndex { 0 };
     size_t trimSectionIndex { 0 };
     size_t loopSectionIndex { 0 };
+    size_t endSectionIndex { 0 };
     size_t routingSectionIndexForVisibility { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CueInspector)

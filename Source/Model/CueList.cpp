@@ -104,6 +104,11 @@ bool CueList::modify (int index, const std::function<void (Cue&)>& fn)
         return false;
 
     fn (cues[(size_t) index]);
+
+    // An edit can change how many steps a cue has - turning a vamp off removes its devamp -
+    // so the standby step has to be re-clamped, or GO would point past the end of the list.
+    clampPositions();
+
     sendChangeMessage();
     return true;
 }
@@ -118,6 +123,7 @@ void CueList::clear()
     cues.clear();
     selectedIndex = -1;
     standbyIndex  = -1;
+    standbyStep   = 0;
     sendChangeMessage();
 }
 
@@ -144,13 +150,39 @@ void CueList::setSelectedIndex (int index)
 
 void CueList::setStandbyIndex (int index)
 {
-    const auto clamped = isEmpty() ? -1 : juce::jlimit (-1, size() - 1, index);
+    setStandbyPosition (index, 0);
+}
 
-    if (clamped != standbyIndex)
-    {
-        standbyIndex = clamped;
-        sendChangeMessage();
-    }
+void CueList::setStandbyPosition (int index, int step)
+{
+    const auto clampedIndex = isEmpty() ? -1 : juce::jlimit (-1, size() - 1, index);
+    const auto numSteps = (int) stepsFor (clampedIndex).size();
+    const auto clampedStep = numSteps > 0 ? juce::jlimit (0, numSteps - 1, step) : 0;
+
+    if (clampedIndex == standbyIndex && clampedStep == standbyStep)
+        return;
+
+    standbyIndex = clampedIndex;
+    standbyStep = clampedStep;
+    sendChangeMessage();
+}
+
+std::vector<CueStep> CueList::stepsFor (int index) const
+{
+    if (const auto* cue = get (index))
+        return buildCueSteps (*cue);
+
+    return {};
+}
+
+std::optional<CueStep> CueList::getStandbyStepInfo() const
+{
+    const auto steps = stepsFor (standbyIndex);
+
+    if (! juce::isPositiveAndBelow (standbyStep, (int) steps.size()))
+        return {};
+
+    return steps[(size_t) standbyStep];
 }
 
 void CueList::advanceStandby()
@@ -158,12 +190,22 @@ void CueList::advanceStandby()
     if (isEmpty())
         return;
 
+    // Walk the rest of this cue's lifecycle before moving on: play, then each devamp, then
+    // the end. Only when those run out does standby step to the next cue.
+    const auto numSteps = (int) stepsFor (standbyIndex).size();
+
+    if (standbyStep + 1 < numSteps)
+    {
+        setStandbyPosition (standbyIndex, standbyStep + 1);
+        return;
+    }
+
     // Deliberately stops on the last cue rather than wrapping: an accidental extra GO at
     // the end of a show should do nothing, not restart the top of the list.
     if (standbyIndex < size() - 1)
-        setStandbyIndex (standbyIndex + 1);
+        setStandbyPosition (standbyIndex + 1, 0);
     else
-        setStandbyIndex (size() - 1);
+        setStandbyPosition (size() - 1, juce::jmax (0, numSteps - 1));
 }
 
 const Cue* CueList::getStandbyCue() const noexcept
@@ -190,11 +232,17 @@ void CueList::clampPositions()
     {
         selectedIndex = -1;
         standbyIndex  = -1;
+        standbyStep   = 0;
         return;
     }
 
     selectedIndex = juce::jlimit (-1, size() - 1, selectedIndex);
     standbyIndex  = juce::jlimit (-1, size() - 1, standbyIndex);
+
+    // Editing a cue can remove a step - turning a vamp off drops its devamp - so the
+    // standby step has to be pulled back into range rather than pointing past the end.
+    const auto numSteps = (int) stepsFor (standbyIndex).size();
+    standbyStep = numSteps > 0 ? juce::jlimit (0, numSteps - 1, standbyStep) : 0;
 }
 
 //==============================================================================
@@ -218,6 +266,7 @@ void CueList::restoreFromVar (const juce::var& v, const juce::File& showDirector
 
     selectedIndex = isEmpty() ? -1 : 0;
     standbyIndex  = isEmpty() ? -1 : 0;
+    standbyStep   = 0;
 
     sendChangeMessage();
 }

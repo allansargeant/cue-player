@@ -280,21 +280,6 @@ bool AudioEngine::go (int cueIndex)
     return fireCue (cueIndex, 0, -1, 0, 0, visited);
 }
 
-bool AudioEngine::goStandby()
-{
-    if (cueList == nullptr)
-        return false;
-
-    const auto index = cueList->getStandbyIndex();
-
-    if (index < 0)
-        return false;
-
-    const auto fired = go (index);
-    cueList->advanceStandby();
-    return fired;
-}
-
 bool AudioEngine::audition (const Cue& cue, double fromSeconds)
 {
     const auto voiceIndex = findFreeVoice();

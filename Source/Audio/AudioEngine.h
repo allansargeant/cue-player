@@ -83,9 +83,6 @@ public:
         Returns false and sets getLastError() if it could not be played. */
     bool go (int cueIndex);
 
-    /** Fires the standby cue and advances standby to the next one. */
-    bool goStandby();
-
     /** Plays @p cue without touching the cue list — used to audition from the inspector. */
     bool audition (const Cue& cue, double fromSeconds);
 

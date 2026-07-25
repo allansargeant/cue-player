@@ -20,14 +20,38 @@ around cues, fades, links, loops and vamps.
 - **Links** — how a cue hands over to the next: auto-continue, auto-follow, or a crossfade.
 - **Loops** — repeat a cue a set number of times, or forever.
 - **Vamps** — circle a section of a cue until the operator calls for it to continue.
+- **Cue lifecycles** — a cue expands into the steps it actually needs (play, devamp, end),
+  and GO walks them one at a time.
 - **Routing** — a per-cue crosspoint matrix onto any of the device's output channels.
 - **Control** — trigger it from OSC, MIDI, MIDI Show Control, Art-Net or sACN, and have
   cues send MIDI and OSC out to other gear.
 
 ![The cue list, inspector and running-cue panel](docs/images/main-window.png)
 
-*Cue 1 looping under the house, cue 3 circling its vamp, and the inspector showing the vamp
-markers on the waveform. Cue 4 is a control cue — no audio, just messages out.*
+*Cue 3 opened to show its lifecycle — play, devamp, end — with the standby marker on the
+step the next GO will perform. Cue 1 loops under the house, cue 4 is a control cue with no
+audio, and the inspector shows the vamp markers on the waveform.*
+
+## Cue lifecycles
+
+A cue is not always a single event. A vamped cue is played, held, released, and eventually
+ended, and each of those is a separate GO. So a cue expands into the steps it actually
+needs, and GO walks them:
+
+| Step | When it exists |
+|---|---|
+| **Play** | Always |
+| **Devamp** | Once per vamp the cue has |
+| **End** | Only when the cue cannot end by itself — an infinite loop, a vamp, a streaming cue — or when the cue is set to always have one |
+
+That last rule is deliberate. Giving every cue an End step would double the number of GOs
+in a show of one-shot stingers, so a cue that stops on its own doesn't get one. Ending is
+either a fade over a per-cue time or a hard stop.
+
+Cues with more than one step show a disclosure triangle; the standby cue opens on its own,
+so you can see what the next few GOs will do before committing to the first. Clicking a
+step stands it by directly, for when a rehearsal needs to jump straight to "release this
+vamp".
 
 <table>
 <tr>
@@ -108,10 +132,10 @@ left alone.
 
 | Key | Action |
 |---|---|
-| `Space` | GO — fire the standby cue |
+| `Space` | GO — perform the standby step |
 | `Return` | Release every vamp |
 | `Esc` | PANIC — instant silence |
-| `Cmd/Ctrl` + `.` | Stop all, with a two-second fade |
+| `S`, or `Cmd/Ctrl` + `.` | Stop all, with a two-second fade |
 | `Cmd/Ctrl` + `P` | Pause / resume |
 | `'` | Audition the selected cue |
 | `Cmd/Ctrl` + `Return` | Standby the selected cue |

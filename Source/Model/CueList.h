@@ -3,7 +3,7 @@
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
 
-#include "Model/Cue.h"
+#include "Model/CueStep.h"
 
 namespace cp
 {
@@ -60,13 +60,28 @@ public:
     void setSelectedIndex (int index);
 
     int  getStandbyIndex() const noexcept           { return standbyIndex; }
+
+    /** Which step of the standby cue's lifecycle GO would perform next. */
+    int  getStandbyStep() const noexcept            { return standbyStep; }
+
+    /** Moves standby to a cue, at the first step of its lifecycle. */
     void setStandbyIndex (int index);
 
-    /** Moves standby to the next cue, stopping at the end of the list. */
+    /** Moves standby to a particular step of a particular cue. */
+    void setStandbyPosition (int index, int step);
+
+    /** Advances to the next step of the standby cue, or to the first step of the next cue
+        when its lifecycle is finished. Stops at the end of the list. */
     void advanceStandby();
 
-    /** The cue that GO would fire, or nullptr when the list has run out. */
+    /** The cue that GO would act on, or nullptr when the list has run out. */
     const Cue* getStandbyCue() const noexcept;
+
+    /** The step list for the cue at @p index. Empty if there is no such cue. */
+    std::vector<CueStep> stepsFor (int index) const;
+
+    /** The step GO would perform, or nullopt when there is nothing standing by. */
+    std::optional<CueStep> getStandbyStepInfo() const;
 
     /** Resolves a link's target: the explicit cue if set, otherwise the one after
         @p fromIndex. Returns nullptr when nothing follows. */
@@ -80,6 +95,7 @@ private:
     std::vector<Cue> cues;
     int selectedIndex { -1 };
     int standbyIndex  { -1 };
+    int standbyStep   { 0 };
 
     void clampPositions();
 

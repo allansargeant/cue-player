@@ -4,6 +4,8 @@
 #include "GUI/LookAndFeel.h"
 #include "Model/CueList.h"
 
+#include <set>
+
 namespace cp
 {
 
@@ -33,6 +35,8 @@ public:
     std::function<void (int index)> onFileRequested;
 
     void refresh();
+
+    /** Scrolls to and selects the row for cue @p index (its header row). */
     void selectRow (int index);
 
 private:
@@ -67,10 +71,33 @@ private:
         columnLink
     };
 
+    /** One visible line: either a cue's header or one step of its lifecycle.
+
+        The table is flat, so the tree is flattened into this list every refresh. That keeps
+        expansion state and row identity in one obvious place instead of spread across the
+        model. */
+    struct DisplayRow
+    {
+        int cueIndex { -1 };
+        int stepIndex { -1 };   ///< -1 for the cue's own header row.
+
+        bool isHeader() const noexcept { return stepIndex < 0; }
+    };
+
+    void rebuildRows();
+    bool isExpanded (const Cue& cue) const;
+    void toggleExpansion (const Cue& cue);
+    juce::Rectangle<int> getTwistyBounds (int width, int height) const;
+
     CueList& cueList;
     AudioEngine& audioEngine;
     juce::TableListBox table;
     std::vector<AudioEngine::ActiveCueInfo> activeSnapshot;
+    std::vector<DisplayRow> displayRows;
+
+    /** Cues the operator has opened by hand. The standby cue opens on its own while it is
+        part-way through its lifecycle, so the steps are visible exactly when they matter. */
+    std::set<juce::Uuid> manuallyExpanded;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CueListComponent)
 };

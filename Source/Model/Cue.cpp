@@ -43,6 +43,46 @@ VampRelease vampReleaseFromString (const juce::String& s)
 }
 
 //==============================================================================
+juce::String toString (EndAction a)
+{
+    return a == EndAction::hardStop ? "hardStop" : "fadeOut";
+}
+
+EndAction endActionFromString (const juce::String& s)
+{
+    return s == "hardStop" ? EndAction::hardStop : EndAction::fadeOut;
+}
+
+juce::StringArray endActionNames()
+{
+    return { "Fade out", "Hard stop" };
+}
+
+juce::String toString (EndStepMode m)
+{
+    switch (m)
+    {
+        case EndStepMode::always: return "always";
+        case EndStepMode::never:  return "never";
+        case EndStepMode::automatic:
+        default:                  return "automatic";
+    }
+}
+
+EndStepMode endStepModeFromString (const juce::String& s)
+{
+    if (s == "always") return EndStepMode::always;
+    if (s == "never")  return EndStepMode::never;
+
+    return EndStepMode::automatic;
+}
+
+juce::StringArray endStepModeNames()
+{
+    return { "Only when it cannot end itself", "Always", "Never" };
+}
+
+//==============================================================================
 juce::String toString (CueType t)
 {
     switch (t)
@@ -235,6 +275,10 @@ juce::var Cue::toVar (const juce::File& showDirectory) const
     o->setProperty ("vampEnd",     vampEnd);
     o->setProperty ("vampRelease", toString (vampRelease));
 
+    o->setProperty ("endAction",   toString (endAction));
+    o->setProperty ("endFadeTime", endFadeTime);
+    o->setProperty ("endStepMode", toString (endStepMode));
+
     {
         auto* l = new juce::DynamicObject();
         l->setProperty ("mode",     toString (link.mode));
@@ -322,6 +366,10 @@ Cue Cue::fromVar (const juce::var& v, const juce::File& showDirectory)
     c.vampStart   = (double) get ("vampStart");
     c.vampEnd     = (double) get ("vampEnd");
     c.vampRelease = vampReleaseFromString (get ("vampRelease").toString());
+
+    c.endAction   = endActionFromString (get ("endAction").toString());
+    c.endFadeTime = juce::jlimit (0.0, 300.0, (double) v.getProperty ("endFadeTime", 3.0));
+    c.endStepMode = endStepModeFromString (get ("endStepMode").toString());
 
     if (const auto l = get ("link"); l.isObject())
     {
