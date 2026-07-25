@@ -8,7 +8,7 @@
 > index, through the real `CueVoice` and checks in/out points, fades, loops, vamps, routing
 > and crossfade timing sample by sample. The control layer's wire formats and mappings are
 > tested the same way, and the OSC and Art-Net paths are additionally driven end-to-end over
-> real sockets against a running app (304 checks, all passing). It has **not** yet been run
+> real sockets against a running app (380 checks, all passing). It has **not** yet been run
 > on a live show; no MIDI, lighting or streaming hardware has been connected to it, and only
 > the macOS/CoreAudio build has been exercised on real audio hardware.
 
@@ -29,9 +29,10 @@ around cues, fades, links, loops and vamps.
 
 ![The cue list, inspector and running-cue panel](docs/images/main-window.png)
 
-*Cue 3 opened to show its lifecycle — play, devamp, end — with the standby marker on the
-step the next GO will perform. Cue 1 loops under the house, cue 4 is a control cue with no
-audio, and the inspector shows the vamp markers on the waveform.*
+*Cue 3 opened to show its sub-cues — Play cue, Devamp, Fade/Stop — with the standby marker
+on the row the next GO will act on. Cue 1 loops under the house, cue 4 is a control cue with
+no audio and cue 5 is a streaming cue; the inspector below shows the vamp markers on the
+waveform and the exact times underneath.*
 
 ## Cue lifecycles
 
@@ -60,13 +61,20 @@ needs to jump straight to "release this vamp".
 <table>
 <tr>
 <td width="50%"><img src="docs/images/control-setup.png" alt="Control setup"></td>
-<td width="50%"><img src="docs/images/audio-setup.png" alt="Audio setup"></td>
+<td width="50%"><img src="docs/images/settings.png" alt="Settings"></td>
 </tr>
 <tr>
 <td>Control setup: the OSC address scheme, MIDI bindings, MSC filtering and the DMX channel
 map, with a live monitor of incoming traffic.</td>
-<td>Audio setup: device, sample rate and buffer, plus the input toggle that streaming
-loopback capture needs.</td>
+<td>Settings: the streaming account, which belongs to the machine and persists across
+shows, and the fade defaults a new cue starts with, which travel in the show file.</td>
+</tr>
+<tr>
+<td colspan="2"><img src="docs/images/audio-setup.png" alt="Audio setup" width="50%"></td>
+</tr>
+<tr>
+<td colspan="2">Audio setup: device, sample rate and buffer, plus the input toggle that
+streaming loopback capture needs.</td>
 </tr>
 </table>
 
@@ -127,10 +135,15 @@ a UI change rather than drifting out of date:
 "./build/SimpleCue_artefacts/Debug/SimpleCue.app/Contents/MacOS/SimpleCue" --screenshots docs/images
 ```
 
-It loads the demo show, opens each window, writes the PNGs and quits. The master level is
-pinned to silence for the run, and the demo audio is synthesised rather than sampled, so
-nothing plays out loud and no one's copyright is involved. Your own control settings are
-left alone.
+It loads the demo show, fires a couple of cues so the list and meters show real state, opens
+each window, writes the PNGs and quits. The master is pulled down to -18 dB for the run, so
+it is audible but quiet rather than silent — fully muted would leave the meters flat, and a
+screenshot of dead meters reads as a bug. The demo audio is synthesised rather than sampled,
+so no one's copyright is involved, and your own settings are left alone.
+
+It also leaves the Art-Net socket closed. Art-Net is broadcast, so a console anywhere on the
+network can put a frame on the configured universe and fire a cue mid-capture — the control
+layer working correctly, but not something a screenshot should depend on.
 
 ## Keyboard
 
@@ -199,15 +212,19 @@ Two ways to work with that, both modelled on the cue:
    (BlackHole on macOS, VB-Cable or VoiceMeeter on Windows, a PipeWire/JACK sink on Linux)
    and open that device's inputs in SimpleCue. The audio then runs through the normal
    voice path, so fade curves, gain and the routing matrix behave exactly as they do for a
-   file cue. Enable inputs in **Audio setup** first.
+   file cue. Enable inputs in **Audio setup**, then choose the channels in **Settings**.
 2. **Remote device** — the service plays on one of its own Connect devices and we send only
    transport and volume commands. Fades go through the service's volume endpoint: coarse,
    network-latent, and never touching our routing matrix.
 
+The account, the service and the capture patch live in **Settings**, because they describe
+the machine rather than the show — set them once and every show uses them. A cue carries
+only its own playlist or track reference.
+
 Each service needs you to register your own developer application and supply its client ID;
 Spotify Connect control also requires Premium. The provider adapters are Phase 3 — the cue
-type, audio path and capture routing are modelled and persist today, and the transport hook
-(`AudioEngine::streamingTransport`) is in place for them to plug into.
+type, the audio path and the capture routing are modelled and persist today, and the
+transport hook (`AudioEngine::streamingTransport`) is in place for them to plug into.
 
 Whether streaming-service audio may be played to an audience is a licensing question
 between you and the service (and your local performing-rights body), not a technical one.

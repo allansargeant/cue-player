@@ -677,12 +677,22 @@ void MainComponent::captureScreenshots (const juce::File& outputDir, std::functi
                             screenshots::capture (*content, outputDir.getChildFile ("audio-setup.png"));
 
                     audioSetupWindow = nullptr;
-                    audioEngine.panic();
+                    showSettings();
 
-                    juce::Timer::callAfterDelay (300, [onComplete]
+                    juce::Timer::callAfterDelay (900, [this, outputDir, onComplete]
                     {
-                        if (onComplete != nullptr)
-                            onComplete();
+                        if (settingsWindow != nullptr)
+                            if (auto* content = settingsWindow->getContentComponent())
+                                screenshots::capture (*content, outputDir.getChildFile ("settings.png"));
+
+                        settingsWindow = nullptr;
+                        audioEngine.panic();
+
+                        juce::Timer::callAfterDelay (300, [onComplete]
+                        {
+                            if (onComplete != nullptr)
+                                onComplete();
+                        });
                     });
                 });
             });

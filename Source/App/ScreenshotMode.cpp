@@ -172,6 +172,11 @@ void buildDemoShow (Show& show, const juce::Array<juce::File>& audioFiles)
     auto& list = show.getCueList();
     list.clear();
 
+    // Give the Settings window something to show rather than a column of zeroes.
+    show.setDefaultFadeInTime (2.0);
+    show.setDefaultFadeOutTime (3.0);
+    show.setDefaultFadeShape (FadeShape::equalPower);
+
     const auto fileAt = [&audioFiles] (int index)
     {
         return juce::isPositiveAndBelow (index, audioFiles.size()) ? audioFiles[index] : juce::File();

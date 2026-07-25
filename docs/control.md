@@ -23,7 +23,7 @@ status. Addresses are matched **case-insensitively** and a trailing slash is ign
 
 | Address | Arguments | Action |
 |---|---|---|
-| `/go` | — | Fire the standby cue and advance |
+| `/go` | — | Perform the standby step and advance |
 | `/cue/<number>/go` | — | Fire a specific cue |
 | `/cue/<number>/stop` | `[fade]` | Stop one cue, optionally over *fade* seconds |
 | `/cue/<number>/standby` | — | Make it the standby cue |
@@ -42,6 +42,11 @@ status. Addresses are matched **case-insensitively** and a trailing slash is ign
 `<number>` is the cue number as printed on the cue sheet, not a list position. Renumbering
 a show therefore renumbers what the outside world triggers, which is what anyone would
 expect. Numeric cue numbers also match loosely, so a desk sending `12.50` finds `12.5`.
+
+`/go` performs whatever the standby marker is sitting on — the cue itself, or one of its
+sub-cues. `/cue/<number>/go` fires that cue as a whole and honours its "firing this cue also
+fires its Play sub-cue" setting, so a cue configured as a container stays a container
+whether it is triggered from the keyboard or from a lighting desk.
 
 An address that names a cue which does not exist produces `/status/error` rather than
 silence — a cue that quietly does not happen is the worst kind of failure.
@@ -94,7 +99,7 @@ one, and *All-types* is required by the spec to be honoured by everything.
 | MSC command | Action |
 |---|---|
 | `GO` with a cue number | Fire that cue |
-| `GO` with no cue number | Fire the standby cue |
+| `GO` with no cue number | Perform the standby step |
 | `STOP` with a cue number | Stop that cue |
 | `STOP` with no cue number | Pause |
 | `RESUME` | Resume |
@@ -121,7 +126,7 @@ Both can run at once. Set the universe, a start address, and the level a channel
 
 | Offset | Channel |
 |---|---|
-| +0 | **GO** — fire the standby cue |
+| +0 | **GO** — perform the standby step |
 | +1 | **Stop all** |
 | +2 | **Panic** |
 | +3 | **Pause** — held above the trigger level means paused |
