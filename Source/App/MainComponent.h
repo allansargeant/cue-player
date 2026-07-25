@@ -3,9 +3,11 @@
 #include "App/CommandIDs.h"
 #include "Audio/AudioEngine.h"
 #include "Audio/SampleCache.h"
+#include "Control/ControlHub.h"
 #include "GUI/ActiveCuesComponent.h"
 #include "GUI/AudioSetupWindow.h"
 #include "GUI/CueInspector.h"
+#include "GUI/ControlSetupWindow.h"
 #include "GUI/CueListComponent.h"
 #include "GUI/TransportBar.h"
 #include "Model/Show.h"
@@ -18,6 +20,7 @@ class MainComponent : public  juce::Component,
                       public  juce::MenuBarModel,
                       public  juce::ApplicationCommandTarget,
                       public  juce::FileDragAndDropTarget,
+                      public  ControlActionHandler,
                       private juce::ChangeListener,
                       private juce::Timer
 {
@@ -49,6 +52,10 @@ public:
     bool isInterestedInFileDrag (const juce::StringArray& files) override;
     void filesDropped (const juce::StringArray& files, int x, int y) override;
 
+    //== ControlActionHandler ==================================================
+    /** Always arrives on the message thread; the transports marshal to it. */
+    void performControlAction (const ControlAction& action) override;
+
 private:
     void timerCallback() override;
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
@@ -58,6 +65,13 @@ private:
     void saveShow (bool forceChooseFile);
     void addCueFromFile (const juce::File& file, int insertAt = -1);
     void addStreamingCue();
+    void addControlCue();
+    void showControlSetup();
+    void publishControlStatus();
+
+    /** Resolves the cue an incoming action refers to, by list position when the transport
+        gave one (DMX) and by cue number otherwise. Returns -1 if there is no such cue. */
+    int resolveControlTarget (const ControlAction& action) const;
     void chooseFileForCue (int index);
     void scanFileInto (Cue& cue, const juce::File& file);
     void deleteSelectedCue();
@@ -74,10 +88,12 @@ private:
     SampleCache sampleCache;
     AudioEngine audioEngine { sampleCache };
     Show show;
+    ControlHub controlHub;
 
     TransportBar transportBar { audioEngine };
     CueListComponent cueListComponent { show.getCueList(), audioEngine };
-    CueInspector inspector { show.getCueList(), audioEngine, sampleCache.getFormatManager() };
+    CueInspector inspector { show.getCueList(), audioEngine, controlHub,
+                             sampleCache.getFormatManager() };
     ActiveCuesComponent activeCues { audioEngine };
 
     juce::StretchableLayoutManager verticalLayout;
@@ -86,6 +102,7 @@ private:
     juce::ApplicationCommandManager commandManager;
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<AudioSetupWindow> audioSetupWindow;
+    std::unique_ptr<ControlSetupWindow> controlSetupWindow;
     juce::TooltipWindow tooltips { this, 700 };
 
     static constexpr int activeCuesWidth = 300;

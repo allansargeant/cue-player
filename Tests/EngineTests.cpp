@@ -11,6 +11,8 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
+#include "TestHarness.h"
+
 #include "Audio/CueVoice.h"
 #include "Audio/SampleSource.h"
 #include "Model/Show.h"
@@ -27,31 +29,8 @@ namespace
 constexpr double testRate = 48000.0;
 constexpr double rampScale = 1.0e6;   // Keeps values well inside float precision.
 
-int failures = 0;
-int checks = 0;
-
-void check (bool condition, const juce::String& what)
-{
-    ++checks;
-
-    if (! condition)
-    {
-        ++failures;
-        std::printf ("  FAIL  %s\n", what.toRawUTF8());
-    }
-}
-
-void checkNear (double actual, double expected, double tolerance, const juce::String& what)
-{
-    ++checks;
-
-    if (! (std::abs (actual - expected) <= tolerance))
-    {
-        ++failures;
-        std::printf ("  FAIL  %s  (got %.6f, expected %.6f, tolerance %.6f)\n",
-                     what.toRawUTF8(), actual, expected, tolerance);
-    }
-}
+using cptest::check;
+using cptest::checkNear;
 
 /** Sample index encoded in a channel-0 value produced by the ramp. */
 double indexFromValue (float value)
@@ -142,7 +121,7 @@ VoiceSpec baseSpec (const SampleSource& source, int numOutputChannels)
 //==============================================================================
 void testInAndOutPoints (const SampleSource& source)
 {
-    std::printf ("in / out points\n");
+    cptest::section ("in / out points");
 
     CueVoice voice;
     voice.prepare (testRate, 256);
@@ -166,7 +145,7 @@ void testInAndOutPoints (const SampleSource& source)
 
 void testPreWait (const SampleSource& source)
 {
-    std::printf ("pre-wait\n");
+    cptest::section ("pre-wait");
 
     CueVoice voice;
     voice.prepare (testRate, 256);
@@ -191,7 +170,7 @@ void testPreWait (const SampleSource& source)
 
 void testFades (const SampleSource& source)
 {
-    std::printf ("fade in / fade out\n");
+    cptest::section ("fade in / fade out");
 
     CueVoice voice;
     voice.prepare (testRate, 256);
@@ -231,7 +210,7 @@ void testFades (const SampleSource& source)
 
 void testLooping (const SampleSource& source)
 {
-    std::printf ("looping\n");
+    cptest::section ("looping");
 
     CueVoice voice;
     voice.prepare (testRate, 256);
@@ -271,7 +250,7 @@ void testLooping (const SampleSource& source)
 
 void testVamp (const SampleSource& source)
 {
-    std::printf ("vamp\n");
+    cptest::section ("vamp");
 
     // --- circles the vamp region until released ------------------------------
     {
@@ -372,7 +351,7 @@ void testVamp (const SampleSource& source)
 
 void testRouting (const SampleSource& stereo)
 {
-    std::printf ("routing\n");
+    cptest::section ("routing");
 
     CueVoice voice;
     voice.prepare (testRate, 256);
@@ -401,7 +380,7 @@ void testRouting (const SampleSource& stereo)
 
 void testScheduledStop (const SampleSource& source)
 {
-    std::printf ("scheduled stop (crossfade timing)\n");
+    cptest::section ("scheduled stop (crossfade timing)");
 
     CueVoice voice;
     voice.prepare (testRate, 256);
@@ -434,7 +413,7 @@ void testScheduledStop (const SampleSource& source)
 
 void testReservedVoiceIsSilent (const SampleSource& source)
 {
-    std::printf ("reserved voice does not leak stale audio\n");
+    cptest::section ("reserved voice does not leak stale audio");
 
     CueVoice voice;
     voice.prepare (testRate, 256);
@@ -465,7 +444,7 @@ void testReservedVoiceIsSilent (const SampleSource& source)
 
 void testResampledLoad (const juce::File& directory, juce::AudioFormatManager& formats)
 {
-    std::printf ("sample-rate conversion on load\n");
+    cptest::section ("sample-rate conversion on load");
 
     // A step, not a ramp, for this one. The windowed-sinc filter has about 1% of passband
     // gain error, so a ramp's amplitude and its timing are indistinguishable: an output
@@ -539,7 +518,7 @@ void testResampledLoad (const juce::File& directory, juce::AudioFormatManager& f
 //==============================================================================
 void testCueListEditing()
 {
-    std::printf ("cue list editing\n");
+    cptest::section ("cue list editing");
 
     CueList list;
 
@@ -600,7 +579,7 @@ void testCueListEditing()
 
 void testShowRoundTrip (const juce::File& directory, const juce::File& audioFile)
 {
-    std::printf ("show save / load round trip\n");
+    cptest::section ("show save / load round trip");
 
     Show original;
     auto& list = original.getCueList();
@@ -737,7 +716,7 @@ void testShowRoundTrip (const juce::File& directory, const juce::File& audioFile
 
 void testCueGeometry()
 {
-    std::printf ("cue timing arithmetic\n");
+    cptest::section ("cue timing arithmetic");
 
     Cue cue;
     cue.fileDuration = 100.0;
@@ -794,6 +773,9 @@ void testCueGeometry()
 } // namespace
 
 //==============================================================================
+/** Defined in ControlTests.cpp. */
+void runControlTests();
+
 int main()
 {
     // ChangeBroadcaster posts through the message queue, so the model classes need a
@@ -836,6 +818,8 @@ int main()
     source.reset();
     directory.deleteRecursively();
 
-    std::printf ("\n%d checks, %d failures\n\n", checks, failures);
-    return failures == 0 ? 0 : 1;
+    runControlTests();
+
+    std::printf ("\n%d checks, %d failures\n\n", cptest::checks, cptest::failures);
+    return cptest::failures == 0 ? 0 : 1;
 }

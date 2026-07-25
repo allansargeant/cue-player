@@ -165,6 +165,15 @@ void CueListComponent::paintCell (juce::Graphics& g, int row, int columnId, int 
                 break;
             }
 
+            if (cue->type == CueType::control)
+            {
+                g.setColour (colours::standby);
+                g.drawText (juce::String (cue->outputMessages.size())
+                                + (cue->outputMessages.size() == 1 ? " message" : " messages"),
+                            area, juce::Justification::centredLeft, true);
+                break;
+            }
+
             if (cue->audioFile == juce::File())
             {
                 g.setColour (colours::textDim);

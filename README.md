@@ -6,8 +6,11 @@
 > (Anthropic), directed and reviewed by a human author. The playback engine is verified
 > numerically — a console harness pushes a ramp signal, whose sample values encode their own
 > index, through the real `CueVoice` and checks in/out points, fades, loops, vamps, routing
-> and crossfade timing sample by sample (130 checks, all passing). It has **not** yet been
-> run on a live show, and only the macOS/CoreAudio build has been exercised on real hardware.
+> and crossfade timing sample by sample. The control layer's wire formats and mappings are
+> tested the same way, and the OSC and Art-Net paths are additionally driven end-to-end over
+> real sockets against a running app (304 checks, all passing). It has **not** yet been run
+> on a live show; no MIDI, lighting or streaming hardware has been connected to it, and only
+> the macOS/CoreAudio build has been exercised on real audio hardware.
 
 A platform-independent audio cue player for theatre, live events and installation, built
 around cues, fades, links, loops and vamps.
@@ -18,6 +21,8 @@ around cues, fades, links, loops and vamps.
 - **Loops** — repeat a cue a set number of times, or forever.
 - **Vamps** — circle a section of a cue until the operator calls for it to continue.
 - **Routing** — a per-cue crosspoint matrix onto any of the device's output channels.
+- **Control** — trigger it from OSC, MIDI, MIDI Show Control, Art-Net or sACN, and have
+  cues send MIDI and OSC out to other gear.
 
 ## Audio backends
 
@@ -63,6 +68,9 @@ sudo apt install libasound2-dev libjack-jackd2-dev libfreetype6-dev libfontconfi
 ./build/CuePlayerTests_artefacts/Release/CuePlayerTests
 ```
 
+There are also two end-to-end scripts that drive a **running** app over real UDP sockets —
+see [Tests/e2e](Tests/e2e).
+
 ## Keyboard
 
 | Key | Action |
@@ -78,6 +86,7 @@ sudo apt install libasound2-dev libjack-jackd2-dev libfreetype6-dev libfontconfi
 | `Shift` + `Cmd/Ctrl` + `↑` / `↓` | Step the standby marker |
 | `Cmd/Ctrl` + `E` | Add audio cue |
 | `Cmd/Ctrl` + `,` | Audio setup |
+| `Shift` + `Cmd/Ctrl` + `,` | Control setup |
 
 Drag audio files onto the window to add them as cues; drag a `.cueshow` file to open it.
 
@@ -93,6 +102,26 @@ it will play is usually known, so the cue it links to starts immediately with a 
 measured in samples, which makes auto-follows and crossfades sample-accurate. Only cues
 with no determinate end — an infinite loop, an unreleased vamp, a streaming cue — fall back
 to the message-thread timer, because nothing can predict when those finish.
+
+## Control
+
+Cue Player can be driven from a lighting desk, a Companion page, a tablet or another
+machine, and cues can send messages out to other gear.
+
+| | |
+|---|---|
+| **OSC** | Fixed address scheme — `/go`, `/cue/12.5/go`, `/stop`, `/master/level` — plus a status feed back to the configured targets so Companion buttons can show what is standing by and what is playing. |
+| **MIDI** | Note, CC and program-change bindings; **MIDI Show Control** (GO / STOP / RESUME / LOAD / GO_OFF / ALL_OFF, with device-ID and command-format filtering); **MIDI Machine Control**. |
+| **Art-Net / sACN** | A block of DMX channels for GO, stop, panic, pause, vamp release, master level, standby select, and direct cue triggers. |
+| **Outgoing** | Any cue can carry MIDI (including MSC and MMC) and OSC messages, scheduled against its pre-wait so they land with the audio rather than with the GO. A cue with messages and no audio is a **control cue**. |
+
+Three details that matter in practice: DMX triggers are **edge-detected** (a desk sends the
+same universe forty times a second), the **first frame after connecting only arms** the
+detector so plugging into a desk holding GO high does not fire a cue, and **sACN preview
+packets are ignored** so a designer working blind cannot fire a sound cue by accident.
+
+Full reference, including the DMX channel map and the OSC address table:
+**[docs/control.md](docs/control.md)**.
 
 ## Streaming services
 
@@ -124,13 +153,14 @@ between you and the service (and your local performing-rights body), not a techn
 
 ## Status
 
-Phase 1 is complete: engine, cue model, show file, cue list, inspector, waveform editor,
-device selection and channel routing.
+**Phase 1** — engine, cue model, show file, cue list, inspector, waveform editor, device
+selection and channel routing. Done.
+
+**Phase 2** — control surface: OSC in and out, MIDI bindings, MSC, MMC, Art-Net, sACN,
+outgoing messages on cues, control cues, and a Companion-facing status feed. Done.
 
 Not yet built:
 
-- **Phase 2 — control surface.** OSC, MIDI in (MSC / note / MMC), MIDI and OSC output on
-  cues, Art-Net and sACN triggering, and a Companion-facing surface.
 - **Phase 3 — streaming provider adapters.** OAuth PKCE and transport for the four services
   above.
 - Disk streaming for very long files (everything is memory-resident today).

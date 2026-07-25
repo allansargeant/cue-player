@@ -12,8 +12,9 @@ namespace
     constexpr int waveformHeight = 118;
 }
 
-CueInspector::CueInspector (CueList& list, AudioEngine& engine, juce::AudioFormatManager& formatManager)
-    : cueList (list), audioEngine (engine), formats (formatManager),
+CueInspector::CueInspector (CueList& list, AudioEngine& engine, ControlHub& hub,
+                            juce::AudioFormatManager& formatManager)
+    : cueList (list), audioEngine (engine), controlHub (hub), formats (formatManager),
       waveform (formatManager)
 {
     addAndMakeVisible (waveform);
@@ -417,14 +418,199 @@ void CueInspector::buildControls()
     };
     addRow ("Curve", linkShapeBox);
 
+    // --- Outgoing messages ----------------------------------------------------
+    addSection ("Messages this cue sends");
+    messageSectionIndex = sectionLabels.size() - 1;
+
+    messageModel.onDoubleClick = [this] (int row) { editMessage (row); };
+    messageList.setModel (&messageModel);
+    messageList.setRowHeight (20);
+    messageList.setColour (juce::ListBox::backgroundColourId, colours::panelLight);
+    messagePanel.addAndMakeVisible (messageList);
+
+    messageAddButton.onClick = [this]
+    {
+        editCue ([] (Cue& cue) { cue.outputMessages.push_back ({}); });
+        updateMessageList();
+
+        if (const auto* cue = cueList.get (cueIndex); cue != nullptr && ! cue->outputMessages.empty())
+        {
+            const auto last = (int) cue->outputMessages.size() - 1;
+            messageList.selectRow (last);
+            editMessage (last);
+        }
+    };
+
+    messageEditButton.onClick = [this] { editMessage (messageList.getSelectedRow()); };
+
+    messageRemoveButton.onClick = [this]
+    {
+        const auto row = messageList.getSelectedRow();
+
+        editCue ([row] (Cue& cue)
+        {
+            if (juce::isPositiveAndBelow (row, (int) cue.outputMessages.size()))
+                cue.outputMessages.erase (cue.outputMessages.begin() + row);
+        });
+
+        updateMessageList();
+    };
+
+    // Fires the message right now, so a patch can be proved before the show rather than
+    // discovered to be wrong during it.
+    messageTestButton.onClick = [this]
+    {
+        const auto row = messageList.getSelectedRow();
+
+        if (const auto* cue = cueList.get (cueIndex);
+            cue != nullptr && juce::isPositiveAndBelow (row, (int) cue->outputMessages.size()))
+            controlHub.sendNow (cue->outputMessages[(size_t) row]);
+    };
+
+    messagePanel.addAndMakeVisible (messageAddButton);
+    messagePanel.addAndMakeVisible (messageEditButton);
+    messagePanel.addAndMakeVisible (messageRemoveButton);
+    messagePanel.addAndMakeVisible (messageTestButton);
+    content.addAndMakeVisible (messagePanel);
+
     // --- Routing --------------------------------------------------------------
     addSection ("Output routing");
+    routingSectionIndex = sectionLabels.size() - 1;
 
     routingMatrix.onRoutingChanged = [this] (const std::vector<RoutePoint>& routes)
     {
         editCue ([&routes] (Cue& c) { c.routing = routes; });
     };
     content.addAndMakeVisible (routingMatrix);
+}
+
+//==============================================================================
+void CueInspector::MessageListModel::paintListBoxItem (int row, juce::Graphics& g,
+                                                       int width, int height, bool selected)
+{
+    if (! juce::isPositiveAndBelow (row, items.size()))
+        return;
+
+    g.fillAll (selected ? colours::panelLight : colours::panel);
+    g.setColour (colours::text);
+    g.setFont (juce::FontOptions (11.5f));
+    g.drawText (items[row], juce::Rectangle<int> (0, 0, width, height).reduced (6, 0),
+                juce::Justification::centredLeft, true);
+}
+
+void CueInspector::MessageListModel::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
+{
+    if (onDoubleClick != nullptr)
+        onDoubleClick (row);
+}
+
+void CueInspector::updateMessageList()
+{
+    messageModel.items.clear();
+
+    if (const auto* cue = cueList.get (cueIndex))
+        for (const auto& message : cue->outputMessages)
+            messageModel.items.add (message.describe());
+
+    messageList.updateContent();
+    messageList.repaint();
+
+    const auto hasSelection = juce::isPositiveAndBelow (messageList.getSelectedRow(),
+                                                        messageModel.items.size());
+    messageEditButton.setEnabled (hasSelection);
+    messageRemoveButton.setEnabled (hasSelection);
+    messageTestButton.setEnabled (hasSelection);
+}
+
+void CueInspector::editMessage (int index)
+{
+    const auto* cue = cueList.get (cueIndex);
+
+    if (cue == nullptr || ! juce::isPositiveAndBelow (index, (int) cue->outputMessages.size()))
+        return;
+
+    const auto message = cue->outputMessages[(size_t) index];
+
+    // One window with every field rather than a form that reshapes itself: a cue player is
+    // configured between shows, and a predictable layout beats a clever one.
+    auto* window = new juce::AlertWindow ("Outgoing message", {}, juce::MessageBoxIconType::NoIcon);
+
+    window->addComboBox ("type", controlMessageTypeNames(), "Type");
+    window->getComboBoxComponent ("type")->setSelectedItemIndex ((int) message.type);
+
+    window->addTextEditor ("delay", juce::String (message.delay, 3), "Delay after the cue starts (s)");
+
+    window->addTextEditor ("oscAddress", message.oscAddress, "OSC address");
+    window->addTextEditor ("oscArgs", message.oscArguments, "OSC arguments");
+    window->addTextEditor ("oscTarget", message.oscTarget, "OSC target (blank = all)");
+
+    window->addTextEditor ("midiTarget", message.midiTarget, "MIDI output (blank = all)");
+    window->addTextEditor ("midiChannel", juce::String (message.midiChannel), "MIDI channel");
+    window->addTextEditor ("midiData1", juce::String (message.midiData1), "Note / CC / program number");
+    window->addTextEditor ("midiData2", juce::String (message.midiData2), "Velocity / value");
+
+    window->addTextEditor ("mscDevice", juce::String (message.mscDeviceID), "MSC / MMC device ID");
+
+    window->addComboBox ("mscFormat", msc::formatNames(), "MSC command format");
+    if (const auto i = msc::formatValues().indexOf (message.mscCommandFormat); i >= 0)
+        window->getComboBoxComponent ("mscFormat")->setSelectedItemIndex (i);
+
+    window->addComboBox ("mscCommand", msc::commandNames(), "MSC command");
+    if (const auto i = msc::commandValues().indexOf (message.mscCommand); i >= 0)
+        window->getComboBoxComponent ("mscCommand")->setSelectedItemIndex (i);
+
+    window->addTextEditor ("mscCue", message.mscCueNumber, "MSC cue number");
+    window->addTextEditor ("mscList", message.mscCueList, "MSC cue list");
+
+    window->addComboBox ("mmcCommand", mmc::commandNames(), "MMC command");
+    if (const auto i = mmc::commandValues().indexOf (message.mmcCommand); i >= 0)
+        window->getComboBoxComponent ("mmcCommand")->setSelectedItemIndex (i);
+
+    window->addButton ("Save",   1, juce::KeyPress (juce::KeyPress::returnKey));
+    window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    window->enterModalState (true, juce::ModalCallbackFunction::create (
+        [this, window, index] (int result)
+        {
+            if (result == 1)
+            {
+                ControlMessage m;
+                m.type  = (ControlMessageType) window->getComboBoxComponent ("type")->getSelectedItemIndex();
+                m.delay = juce::jmax (0.0, window->getTextEditorContents ("delay").getDoubleValue());
+
+                m.oscAddress   = window->getTextEditorContents ("oscAddress").trim();
+                m.oscArguments = window->getTextEditorContents ("oscArgs");
+                m.oscTarget    = window->getTextEditorContents ("oscTarget").trim();
+
+                m.midiTarget  = window->getTextEditorContents ("midiTarget").trim();
+                m.midiChannel = juce::jlimit (1, 16,  window->getTextEditorContents ("midiChannel").getIntValue());
+                m.midiData1   = juce::jlimit (0, 127, window->getTextEditorContents ("midiData1").getIntValue());
+                m.midiData2   = juce::jlimit (0, 127, window->getTextEditorContents ("midiData2").getIntValue());
+
+                m.mscDeviceID = juce::jlimit (0, 127, window->getTextEditorContents ("mscDevice").getIntValue());
+
+                const auto formatIndex = window->getComboBoxComponent ("mscFormat")->getSelectedItemIndex();
+                const auto commandIndex = window->getComboBoxComponent ("mscCommand")->getSelectedItemIndex();
+                const auto mmcIndex = window->getComboBoxComponent ("mmcCommand")->getSelectedItemIndex();
+
+                if (formatIndex >= 0)  m.mscCommandFormat = msc::formatValues()[formatIndex];
+                if (commandIndex >= 0) m.mscCommand = msc::commandValues()[commandIndex];
+                if (mmcIndex >= 0)     m.mmcCommand = mmc::commandValues()[mmcIndex];
+
+                m.mscCueNumber = window->getTextEditorContents ("mscCue").trim();
+                m.mscCueList   = window->getTextEditorContents ("mscList").trim();
+
+                editCue ([index, m] (Cue& cue)
+                {
+                    if (juce::isPositiveAndBelow (index, (int) cue.outputMessages.size()))
+                        cue.outputMessages[(size_t) index] = m;
+                });
+
+                updateMessageList();
+            }
+
+            delete window;
+        }), false);
 }
 
 //==============================================================================
@@ -550,6 +736,7 @@ void CueInspector::refresh()
         pushSourceInfoToWaveform();
         updateEnablement();
         updateRoutingMatrix();
+        updateMessageList();
         repaint();
         return;
     }
@@ -613,6 +800,7 @@ void CueInspector::refresh()
     pushSourceInfoToWaveform();
     updateEnablement();
     updateRoutingMatrix();
+    updateMessageList();
     resized();
     repaint();
 }
@@ -653,11 +841,34 @@ void CueInspector::resized()
             y += height + rowGap;
         }
 
+        if (section == messageSectionIndex)
+        {
+            const auto visibleRows = juce::jmax (3, messageModel.items.size());
+            const auto panelHeight = visibleRows * 20 + rowHeight + 10;
+            messagePanel.setBounds (8, y, width - 16, panelHeight);
+
+            auto area = messagePanel.getLocalBounds();
+            auto buttons = area.removeFromBottom (rowHeight);
+            messageAddButton.setBounds (buttons.removeFromLeft (60).reduced (1));
+            messageEditButton.setBounds (buttons.removeFromLeft (60).reduced (1));
+            messageRemoveButton.setBounds (buttons.removeFromLeft (76).reduced (1));
+            messageTestButton.setBounds (buttons.removeFromLeft (60).reduced (1));
+            area.removeFromBottom (4);
+            messageList.setBounds (area);
+
+            y += panelHeight;
+        }
+
+        if (section == routingSectionIndex)
+        {
+            routingMatrix.setBounds (8, y, width - 16, routingMatrix.getPreferredHeight());
+            y += routingMatrix.getHeight();
+        }
+
         y += sectionGap;
     }
 
-    routingMatrix.setBounds (8, y, width - 16, routingMatrix.getPreferredHeight());
-    y += routingMatrix.getHeight() + 16;
+    y += 16;
 
     content.setSize (width, y);
 }

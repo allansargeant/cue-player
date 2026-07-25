@@ -274,7 +274,7 @@ bool AudioEngine::buildSpec (const Cue& cue, VoiceSpec& spec,
 bool AudioEngine::go (int cueIndex)
 {
     juce::Array<juce::Uuid> visited;
-    return fireCue (cueIndex, 0, -1, 0, 0, visited) >= 0;
+    return fireCue (cueIndex, 0, -1, 0, 0, visited);
 }
 
 bool AudioEngine::goStandby()
@@ -328,29 +328,43 @@ bool AudioEngine::audition (const Cue& cue, double fromSeconds)
     return true;
 }
 
-int AudioEngine::fireCue (int cueIndex, juce::int64 extraPreWaitSamples,
-                          int parentVoice, juce::uint32 parentGeneration,
-                          int depth, juce::Array<juce::Uuid>& visited)
+bool AudioEngine::fireCue (int cueIndex, juce::int64 extraPreWaitSamples,
+                           int parentVoice, juce::uint32 parentGeneration,
+                           int depth, juce::Array<juce::Uuid>& visited)
 {
     if (cueList == nullptr)
-        return -1;
+        return false;
 
     const auto* cue = cueList->get (cueIndex);
 
     if (cue == nullptr)
-        return -1;
+        return false;
 
     if (depth > maxLinkChainDepth || visited.contains (cue->id))
     {
         // A ring of links, or a chain longer than any real show. Stop rather than spin.
         setError ("Link chain from cue " + cue->number + " loops back on itself; stopped there.");
-        return -1;
+        return false;
     }
 
     visited.add (cue->id);
 
-    // Streaming cues that play on a Connect device produce no audio here; hand them to
-    // the provider adapter instead.
+    const auto preWaitSeconds = cue->preWait
+                              + (currentSampleRate > 0.0
+                                     ? (double) extraPreWaitSamples / currentSampleRate : 0.0);
+
+    // --- a cue that only sends messages ---------------------------------------
+    if (cue->type == CueType::control)
+    {
+        if (onCueFired != nullptr)
+            onCueFired (*cue, preWaitSeconds);
+
+        scheduleLink (cueIndex, -1, secondsToSamples (preWaitSeconds), depth, visited);
+        sendChangeMessage();
+        return true;
+    }
+
+    // --- a streaming cue playing on the service's own device -------------------
     if (cue->type == CueType::streaming
         && cue->streaming.audioPath == StreamingAudioPath::remoteDevice)
     {
@@ -358,15 +372,18 @@ int AudioEngine::fireCue (int cueIndex, juce::int64 extraPreWaitSamples,
 
         if (streamingTransport != nullptr && streamingTransport (*cue, error))
         {
-            juce::Array<juce::Uuid> chain (visited);
-            scheduleLink (cueIndex, -1, extraPreWaitSamples, depth, chain);
-            return -1;
+            if (onCueFired != nullptr)
+                onCueFired (*cue, preWaitSeconds);
+
+            scheduleLink (cueIndex, -1, secondsToSamples (preWaitSeconds), depth, visited);
+            sendChangeMessage();
+            return true;
         }
 
         setError (error.isNotEmpty()
                       ? error
                       : "No streaming account is connected for cue " + cue->number + ".");
-        return -1;
+        return false;
     }
 
     const auto voiceIndex = findFreeVoice();
@@ -374,14 +391,14 @@ int AudioEngine::fireCue (int cueIndex, juce::int64 extraPreWaitSamples,
     if (voiceIndex < 0)
     {
         setError ("All " + juce::String (limits::maxVoices) + " voices are in use.");
-        return -1;
+        return false;
     }
 
     VoiceSpec spec;
     std::shared_ptr<SampleSource> hold;
 
     if (! buildSpec (*cue, spec, hold, extraPreWaitSamples))
-        return -1;
+        return false;
 
     auto& record = records[(size_t) voiceIndex];
     record = {};
@@ -395,10 +412,14 @@ int AudioEngine::fireCue (int cueIndex, juce::int64 extraPreWaitSamples,
     voices[(size_t) voiceIndex]->setSpec (spec);
     pushCommand ({ Command::Type::start, voiceIndex, 0, 0, 0.0f, FadeShape::linear });
 
+    if (onCueFired != nullptr)
+        onCueFired (*cue, currentSampleRate > 0.0
+                              ? (double) spec.preWaitSamples / currentSampleRate : 0.0);
+
     scheduleLink (cueIndex, voiceIndex, spec.preWaitSamples, depth, visited);
 
     sendChangeMessage();
-    return voiceIndex;
+    return true;
 }
 
 void AudioEngine::scheduleLink (int cueIndex, int sourceVoice, juce::int64 basePreWaitSamples,
@@ -427,7 +448,12 @@ void AudioEngine::scheduleLink (int cueIndex, int sourceVoice, juce::int64 baseP
 
     const auto sourceGeneration = sourceVoice >= 0 ? records[(size_t) sourceVoice].generation : 0u;
     const auto delaySamples     = secondsToSamples (cue->link.delay);
-    const auto playLength       = cue->playbackLength();   // 0 when open-ended
+    const auto playLength       = cue->playbackLength();
+
+    // A control cue also has a playbackLength of 0, but for the opposite reason: it takes
+    // no time at all rather than an unknowable amount. isOpenEnded() is what separates
+    // "cannot be predicted" from "finishes immediately".
+    const auto openEnded = cue->isOpenEnded();
 
     switch (cue->link.mode)
     {
@@ -441,7 +467,7 @@ void AudioEngine::scheduleLink (int cueIndex, int sourceVoice, juce::int64 baseP
 
         case LinkMode::autoFollow:
         {
-            if (playLength > 0.0)
+            if (! openEnded)
             {
                 fireCue (targetIndex,
                          basePreWaitSamples + secondsToSamples (playLength) + delaySamples,
@@ -460,7 +486,7 @@ void AudioEngine::scheduleLink (int cueIndex, int sourceVoice, juce::int64 baseP
 
         case LinkMode::crossfade:
         {
-            if (playLength <= 0.0)
+            if (openEnded)
             {
                 // Same problem as an open-ended auto-follow, and a crossfade "before the
                 // end" is meaningless without an end. Degrade to following it.

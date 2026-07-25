@@ -8,6 +8,7 @@ namespace
     const char* deviceStateKey = "audioDeviceState";
     const char* lastShowDirKey = "lastShowDirectory";
     const char* lastAudioDirKey = "lastAudioDirectory";
+    const char* controlSettingsKey = "controlSettings";
 }
 
 MainComponent::MainComponent (juce::ApplicationProperties& props)
@@ -39,7 +40,7 @@ MainComponent::MainComponent (juce::ApplicationProperties& props)
 
     transportBar.onGo           = [this] { commandManager.invokeDirectly (CommandIDs::go, false); };
     transportBar.onStopAll      = [this] { audioEngine.stopAll (2.0); };
-    transportBar.onPanic        = [this] { audioEngine.panic(); };
+    transportBar.onPanic        = [this] { audioEngine.panic(); controlHub.cancelPendingMessages(); };
     transportBar.onPauseToggle  = [this] { audioEngine.setPaused (! audioEngine.isPaused()); };
     transportBar.onReleaseVamp  = [this] { audioEngine.releaseAllVamps(); };
     transportBar.onAudioSetup   = [this] { showAudioSetup(); };
@@ -50,6 +51,54 @@ MainComponent::MainComponent (juce::ApplicationProperties& props)
 
     inspector.onCueEdited    = [this] { cueListComponent.refresh(); updateWindowTitle(); };
     inspector.onFileRequested = [this] (int index) { chooseFileForCue (index); };
+
+    // ---- control layer -------------------------------------------------------
+    controlHub.setActionHandler (this);
+
+    {
+        auto settings = ControlSettings::createDefault();
+
+        if (auto* user = properties.getUserSettings())
+        {
+            juce::var stored;
+
+            if (juce::JSON::parse (user->getValue (controlSettingsKey), stored).wasOk()
+                && stored.isObject())
+                settings = ControlSettings::fromVar (stored);
+        }
+
+        if (const auto problems = controlHub.applySettings (settings); problems.isNotEmpty())
+            reportError ("Control setup could not be fully applied.\n\n" + problems);
+    }
+
+    controlHub.onStatusRequested = [this]
+    {
+        ControlHub::StatusSnapshot snapshot;
+
+        if (const auto* standby = show.getCueList().getStandbyCue())
+        {
+            snapshot.standbyNumber = standby->number;
+            snapshot.standbyName = standby->name;
+        }
+
+        const auto active = audioEngine.getActiveCues();
+        snapshot.numPlaying = (int) active.size();
+        snapshot.paused = audioEngine.isPaused();
+        snapshot.vamping = audioEngine.isAnythingVamping();
+        snapshot.masterDb = audioEngine.getMasterGainDb();
+
+        for (const auto& entry : active)
+            snapshot.playingCueNumbers.add (entry.number);
+
+        return snapshot;
+    };
+
+    // A cue's outgoing messages are scheduled against its pre-wait, so they land with the
+    // first sample of audio rather than at the moment GO was pressed.
+    audioEngine.onCueFired = [this] (const Cue& cue, double secondsUntilAudio)
+    {
+        controlHub.fireCueMessages (cue.outputMessages, secondsUntilAudio);
+    };
 
     // ---- commands ------------------------------------------------------------
     commandManager.registerAllCommandsForTarget (this);
@@ -69,8 +118,16 @@ MainComponent::~MainComponent()
     stopTimer();
 
     if (auto* user = properties.getUserSettings())
+    {
         if (auto state = audioEngine.createDeviceStateXml())
             user->setValue (deviceStateKey, state.get());
+
+        user->setValue (controlSettingsKey, juce::JSON::toString (controlHub.getSettings().toVar(), true));
+    }
+
+    controlHub.setActionHandler (nullptr);
+    audioEngine.onCueFired = nullptr;
+    controlSetupWindow = nullptr;
 
     sampleCache.removeChangeListener (this);
     show.removeChangeListener (this);
@@ -120,7 +177,12 @@ void MainComponent::timerCallback()
     else
         status.add (juce::String (sampleCache.getMemoryUsage() / (1024 * 1024)) + " MB loaded");
 
+    if (const auto controlSummary = controlHub.getStatusSummary(); controlSummary.isNotEmpty())
+        status.add (controlSummary);
+
     transportBar.setShowStatus (status.joinIntoString ("   |   "));
+
+    publishControlStatus();
 
     // Track the play head of the selected cue on the waveform, if it happens to be running.
     if (const auto* selected = list.get (list.getSelectedIndex()))
@@ -498,6 +560,184 @@ void MainComponent::preloadShowAudio()
         sampleCache.request (file);
 }
 
+
+//==============================================================================
+void MainComponent::publishControlStatus()
+{
+    if (controlHub.onStatusRequested != nullptr)
+        controlHub.publishStatus (controlHub.onStatusRequested());
+}
+
+int MainComponent::resolveControlTarget (const ControlAction& action) const
+{
+    const auto& list = show.getCueList();
+
+    // DMX can only count, so it addresses cues by position. Everything else uses the
+    // number printed on the cue sheet, which is what an operator would quote.
+    if (action.cueIndex >= 0)
+        return juce::isPositiveAndBelow (action.cueIndex, list.size()) ? action.cueIndex : -1;
+
+    if (action.cueNumber.isEmpty())
+        return -1;
+
+    const auto wanted = action.cueNumber.trim();
+
+    for (int i = 0; i < list.size(); ++i)
+        if (const auto* cue = list.get (i); cue != nullptr && cue->number.trim() == wanted)
+            return i;
+
+    // Cue numbers are free text, so "12.50" from a lighting desk should still find "12.5".
+    for (int i = 0; i < list.size(); ++i)
+        if (const auto* cue = list.get (i);
+            cue != nullptr && cue->number.trim().getDoubleValue() == wanted.getDoubleValue()
+            && wanted.containsAnyOf ("0123456789"))
+            return i;
+
+    return -1;
+}
+
+void MainComponent::performControlAction (const ControlAction& action)
+{
+    jassert (juce::MessageManager::existsAndIsCurrentThread());
+
+    auto& list = show.getCueList();
+
+    const auto withTargetCue = [this, &action] (const std::function<void (int)>& fn)
+    {
+        const auto index = resolveControlTarget (action);
+
+        if (index < 0)
+        {
+            // Worth saying out loud: a desk firing a cue number that is not in the show is
+            // a cue that silently does not happen, which is the worst kind of failure.
+            controlHub.getOsc().broadcast ("/status/error",
+                { "No cue matching \"" + action.cueNumber + "\"" });
+            return;
+        }
+
+        fn (index);
+    };
+
+    switch (action.type)
+    {
+        case ControlActionType::go:
+            audioEngine.goStandby();
+            break;
+
+        case ControlActionType::goCue:
+            withTargetCue ([this] (int index) { audioEngine.go (index); });
+            break;
+
+        case ControlActionType::stopAll:
+            audioEngine.stopAll (juce::jmax (0.0, action.value));
+            break;
+
+        case ControlActionType::stopCue:
+            withTargetCue ([this, &action, &list] (int index)
+            {
+                if (const auto* cue = list.get (index))
+                    audioEngine.stopCue (cue->id, juce::jmax (0.0, action.value));
+            });
+            break;
+
+        case ControlActionType::panic:
+            audioEngine.panic();
+            controlHub.cancelPendingMessages();
+            break;
+
+        case ControlActionType::pause:       audioEngine.setPaused (true); break;
+        case ControlActionType::resume:      audioEngine.setPaused (false); break;
+        case ControlActionType::pauseToggle: audioEngine.setPaused (! audioEngine.isPaused()); break;
+
+        case ControlActionType::releaseVamp:
+            audioEngine.releaseAllVamps();
+            break;
+
+        case ControlActionType::releaseVampCue:
+            withTargetCue ([this, &list] (int index)
+            {
+                if (const auto* cue = list.get (index))
+                    audioEngine.releaseVamp (cue->id);
+            });
+            break;
+
+        case ControlActionType::standbyCue:
+            withTargetCue ([&list] (int index) { list.setStandbyIndex (index); });
+            break;
+
+        case ControlActionType::standbyNext:
+            list.setStandbyIndex (list.getStandbyIndex() + 1);
+            break;
+
+        case ControlActionType::standbyPrevious:
+            list.setStandbyIndex (list.getStandbyIndex() - 1);
+            break;
+
+        case ControlActionType::selectCue:
+            withTargetCue ([this, &list] (int index)
+            {
+                list.setSelectedIndex (index);
+                inspector.setCueIndex (index);
+                cueListComponent.selectRow (index);
+            });
+            break;
+
+        case ControlActionType::auditionCue:
+            withTargetCue ([this, &list] (int index)
+            {
+                if (const auto* cue = list.get (index))
+                    audioEngine.audition (*cue, cue->startTime);
+            });
+            break;
+
+        case ControlActionType::masterLevel:
+            audioEngine.setMasterGainDb (action.value);
+            break;
+
+        case ControlActionType::none:
+        default:
+            return;
+    }
+
+    cueListComponent.refresh();
+    publishControlStatus();
+}
+
+void MainComponent::addControlCue()
+{
+    Cue cue;
+    cue.type = CueType::control;
+    cue.number = show.getCueList().suggestNextNumber();
+    cue.name = "Control cue";
+
+    ControlMessage message;
+    message.type = ControlMessageType::osc;
+    cue.outputMessages.push_back (message);
+
+    const auto index = show.getCueList().insert (std::move (cue));
+    show.getCueList().setSelectedIndex (index);
+    inspector.setCueIndex (index);
+    cueListComponent.selectRow (index);
+}
+
+void MainComponent::showControlSetup()
+{
+    if (controlSetupWindow != nullptr)
+    {
+        controlSetupWindow->toFront (true);
+        return;
+    }
+
+    controlSetupWindow = std::make_unique<ControlSetupWindow> (controlHub, [this]
+    {
+        if (auto* user = properties.getUserSettings())
+            user->setValue (controlSettingsKey,
+                            juce::JSON::toString (controlHub.getSettings().toVar(), true));
+    });
+
+    controlSetupWindow->onClose = [this] { controlSetupWindow = nullptr; };
+}
+
 //==============================================================================
 bool MainComponent::isInterestedInFileDrag (const juce::StringArray& files)
 {
@@ -561,6 +801,7 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String&)
         case 1:
             menu.addCommandItem (&commandManager, CommandIDs::addCue);
             menu.addCommandItem (&commandManager, CommandIDs::addStreamingCue);
+            menu.addCommandItem (&commandManager, CommandIDs::addControlCue);
             menu.addSeparator();
             menu.addCommandItem (&commandManager, CommandIDs::duplicateCue);
             menu.addCommandItem (&commandManager, CommandIDs::deleteCue);
@@ -586,6 +827,7 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String&)
 
         case 3:
             menu.addCommandItem (&commandManager, CommandIDs::showAudioSetup);
+            menu.addCommandItem (&commandManager, CommandIDs::showControlSetup);
             break;
 
         default:
@@ -607,13 +849,14 @@ void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
 {
     commands.addArray ({
         CommandIDs::newShow, CommandIDs::openShow, CommandIDs::saveShow, CommandIDs::saveShowAs,
-        CommandIDs::addCue, CommandIDs::addStreamingCue, CommandIDs::duplicateCue,
+        CommandIDs::addCue, CommandIDs::addStreamingCue, CommandIDs::addControlCue,
+        CommandIDs::duplicateCue,
         CommandIDs::deleteCue, CommandIDs::moveCueUp, CommandIDs::moveCueDown,
         CommandIDs::renumberCues,
         CommandIDs::go, CommandIDs::stopAll, CommandIDs::panic, CommandIDs::pauseResume,
         CommandIDs::releaseVamp, CommandIDs::auditionCue,
         CommandIDs::setStandbyToSelected, CommandIDs::standbyPrevious, CommandIDs::standbyNext,
-        CommandIDs::showAudioSetup });
+        CommandIDs::showAudioSetup, CommandIDs::showControlSetup });
 }
 
 void MainComponent::getCommandInfo (juce::CommandID commandID, juce::ApplicationCommandInfo& info)
@@ -654,6 +897,10 @@ void MainComponent::getCommandInfo (juce::CommandID commandID, juce::Application
         case CommandIDs::addStreamingCue:
             info.setInfo ("Add streaming cue", "Add a cue that plays from a streaming service", "Cue", 0);
             info.addDefaultKeypress ('e', shiftCmd);
+            break;
+
+        case CommandIDs::addControlCue:
+            info.setInfo ("Add control cue", "Add a cue that only sends MIDI and OSC", "Cue", 0);
             break;
 
         case CommandIDs::duplicateCue:
@@ -739,6 +986,11 @@ void MainComponent::getCommandInfo (juce::CommandID commandID, juce::Application
             info.addDefaultKeypress (',', cmd);
             break;
 
+        case CommandIDs::showControlSetup:
+            info.setInfo ("Control setup...", "OSC, MIDI, Art-Net and sACN", "Audio", 0);
+            info.addDefaultKeypress (',', shiftCmd);
+            break;
+
         default:
             break;
     }
@@ -782,6 +1034,7 @@ bool MainComponent::perform (const InvocationInfo& info)
         }
 
         case CommandIDs::addStreamingCue: addStreamingCue(); return true;
+        case CommandIDs::addControlCue:   addControlCue(); return true;
         case CommandIDs::duplicateCue:    duplicateSelectedCue(); return true;
         case CommandIDs::deleteCue:       deleteSelectedCue(); return true;
         case CommandIDs::moveCueUp:       moveSelectedCue (-1); return true;
@@ -797,7 +1050,10 @@ bool MainComponent::perform (const InvocationInfo& info)
             return true;
 
         case CommandIDs::stopAll:     audioEngine.stopAll (2.0); return true;
-        case CommandIDs::panic:       audioEngine.panic(); return true;
+        case CommandIDs::panic:
+            audioEngine.panic();
+            controlHub.cancelPendingMessages();
+            return true;
         case CommandIDs::pauseResume: audioEngine.setPaused (! audioEngine.isPaused()); return true;
         case CommandIDs::releaseVamp: audioEngine.releaseAllVamps(); return true;
 
@@ -820,7 +1076,8 @@ bool MainComponent::perform (const InvocationInfo& info)
             list.setStandbyIndex (list.getStandbyIndex() + 1);
             return true;
 
-        case CommandIDs::showAudioSetup: showAudioSetup(); return true;
+        case CommandIDs::showAudioSetup:   showAudioSetup(); return true;
+        case CommandIDs::showControlSetup: showControlSetup(); return true;
 
         default:
             return false;

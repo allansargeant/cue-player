@@ -2,8 +2,8 @@
 
 Platform-independent audio cue player for theatre and live events. Cues (audio files with
 in/out points), fades, links (cue-to-cue transitions), loops and vamps. JUCE 8 / C++20,
-CMake. Public repo. Phase 1 complete; Phases 2 (control protocols) and 3 (streaming
-adapters) not started.
+CMake. Public repo. Phases 1 (engine/UI) and 2 (control protocols) complete; Phase 3
+(streaming adapters) not started.
 
 ## Commands
 - Configure: `cmake -B build -DCMAKE_BUILD_TYPE=Release`
@@ -14,6 +14,9 @@ adapters) not started.
 - `Source/Model` — `Cue`, `CueList`, `Show` (JSON `.cueshow`), `FadeCurve`. Message thread only.
 - `Source/Audio` — `AudioEngine` (device + voice pool + link scheduling), `CueVoice` (one
   sounding instance), `SampleSource`/`SampleCache` (decode + resample to device rate).
+- `Source/Control` — `ControlHub` (owns the transports, schedules outgoing messages,
+  publishes status), `OscControl`, `MidiControl`, `DmxControl`. `DmxProtocol` and the
+  `actionFor*` mappings are pure functions so they can be tested without sockets.
 - `Source/GUI`, `Source/App` — UI and the command/menu target.
 
 ## Rules that matter here
@@ -31,9 +34,22 @@ adapters) not started.
 - **No non-ASCII characters in string literals.** JUCE's `String(const char*)` asserts on
   them and mangles the text. Em dashes in comments are fine; in literals they are not.
 
+## Rules for the control layer
+- Incoming control arrives on socket/MIDI threads. **Never touch the show from those** —
+  every transport marshals to the message thread before calling `performControlAction`.
+- DMX triggers are edge-detected, and the first frame after a reset only arms the detector.
+  Level-triggering would fire a cue on every frame a desk sends.
+- Cues are addressed by **number** everywhere except DMX, which can only count and so uses
+  list position (`ControlAction::cueIndex`).
+
 ## Verifying playback changes
 Extend `Tests/EngineTests.cpp` rather than listening. The stimulus is a ramp whose sample
 values encode their own index, so "played the right region", "played the wrong region" and
 "looped a sample early" are three different numbers instead of three identical waveforms.
 Measure timing with a step, not a ramp — the interpolator's gain error and its delay are
 indistinguishable on a ramp.
+
+For the control layer, extend `Tests/ControlTests.cpp`. Build packets byte by byte rather
+than reusing the parser's own layout, so a bug in the parser cannot cancel out against a
+matching bug in the test. `Tests/e2e/` holds two scripts that drive a running app over real
+sockets; run them by hand after changing OSC or DMX.

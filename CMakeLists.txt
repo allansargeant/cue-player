@@ -51,6 +51,14 @@ target_sources(CuePlayer
         Source/Model/CueList.cpp
         Source/Model/Show.cpp
         Source/Model/FadeCurve.cpp
+        Source/Model/ControlMessage.cpp
+
+        Source/Control/ControlHub.cpp
+        Source/Control/ControlSettings.cpp
+        Source/Control/DmxControl.cpp
+        Source/Control/DmxProtocol.cpp
+        Source/Control/MidiControl.cpp
+        Source/Control/OscControl.cpp
 
         Source/Audio/AudioEngine.cpp
         Source/Audio/CueVoice.cpp
@@ -65,6 +73,7 @@ target_sources(CuePlayer
         Source/GUI/RoutingMatrixComponent.cpp
         Source/GUI/AudioSetupWindow.cpp
         Source/GUI/ActiveCuesComponent.cpp
+        Source/GUI/ControlSetupWindow.cpp
 )
 
 target_include_directories(CuePlayer PRIVATE Source)
@@ -142,14 +151,21 @@ juce_add_console_app(CuePlayerTests PRODUCT_NAME "CuePlayerTests")
 target_sources(CuePlayerTests
     PRIVATE
         Tests/EngineTests.cpp
+        Tests/ControlTests.cpp
         Source/Model/Cue.cpp
         Source/Model/CueList.cpp
         Source/Model/Show.cpp
         Source/Model/FadeCurve.cpp
+        Source/Model/ControlMessage.cpp
+        Source/Control/ControlSettings.cpp
+        Source/Control/DmxProtocol.cpp
+        Source/Control/DmxControl.cpp
+        Source/Control/MidiControl.cpp
+        Source/Control/OscControl.cpp
         Source/Audio/CueVoice.cpp
         Source/Audio/SampleSource.cpp)
 
-target_include_directories(CuePlayerTests PRIVATE Source)
+target_include_directories(CuePlayerTests PRIVATE Source Tests)
 
 target_compile_definitions(CuePlayerTests
     PRIVATE
@@ -161,7 +177,9 @@ target_link_libraries(CuePlayerTests
     PRIVATE
         juce::juce_audio_formats
         juce::juce_audio_basics
+        juce::juce_audio_devices
         juce::juce_events
+        juce::juce_osc
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)

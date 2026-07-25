@@ -18,6 +18,7 @@ namespace CommandIDs
 
         addCue,
         addStreamingCue,
+        addControlCue,
         deleteCue,
         duplicateCue,
         moveCueUp,
@@ -36,6 +37,7 @@ namespace CommandIDs
         standbyNext,
 
         showAudioSetup,
+        showControlSetup,
         showAbout
     };
 }

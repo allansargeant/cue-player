@@ -68,6 +68,11 @@ public:
         provider adapter here; until then such a cue reports that it has no transport. */
     std::function<bool (const Cue&, juce::String& error)> streamingTransport;
 
+    /** Called on the message thread whenever a cue is fired, with the time until its first
+        sample sounds. The control layer uses it to schedule the cue's outgoing MIDI and
+        OSC messages so they land with the audio rather than with the GO. */
+    std::function<void (const Cue&, double secondsUntilAudio)> onCueFired;
+
     //== Transport ============================================================
     /** Fires the cue at @p cueIndex and schedules whatever it links to.
         Returns false and sets getLastError() if it could not be played. */
@@ -178,7 +183,9 @@ private:
                     juce::int64 extraPreWaitSamples,
                     double overrideStartSeconds = -1.0);
 
-    int  fireCue (int cueIndex, juce::int64 extraPreWaitSamples,
+    /** Fires one cue and schedules whatever it links to. Returns false if it could not be
+        played; a control cue succeeds without occupying a voice. */
+    bool fireCue (int cueIndex, juce::int64 extraPreWaitSamples,
                   int parentVoice, juce::uint32 parentGeneration,
                   int depth, juce::Array<juce::Uuid>& visited);
 

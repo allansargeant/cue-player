@@ -45,12 +45,21 @@ VampRelease vampReleaseFromString (const juce::String& s)
 //==============================================================================
 juce::String toString (CueType t)
 {
-    return t == CueType::streaming ? "streaming" : "audioFile";
+    switch (t)
+    {
+        case CueType::streaming: return "streaming";
+        case CueType::control:   return "control";
+        case CueType::audioFile:
+        default:                 return "audioFile";
+    }
 }
 
 CueType cueTypeFromString (const juce::String& s)
 {
-    return s == "streaming" ? CueType::streaming : CueType::audioFile;
+    if (s == "streaming") return CueType::streaming;
+    if (s == "control")   return CueType::control;
+
+    return CueType::audioFile;
 }
 
 juce::String toString (StreamingAudioPath p)
@@ -93,11 +102,25 @@ bool Cue::hasUsableVamp() const noexcept
         && (regionEnd <= 0.0 || vampEnd <= regionEnd);
 }
 
+bool Cue::isOpenEnded() const noexcept
+{
+    if (type == CueType::control)
+        return false;                  // Fires its messages and is done.
+
+    if (type == CueType::streaming)
+        return true;                   // The service decides when it stops.
+
+    if (hasUsableVamp())
+        return true;
+
+    return loopEnabled && loopCount <= 0;
+}
+
 double Cue::playbackLength() const noexcept
 {
-    // A streaming cue's length is decided by the service, and a vamp is open-ended by
-    // definition, so neither has a length we can state up front.
-    if (type == CueType::streaming || hasUsableVamp())
+    // A control cue occupies no time; a streaming cue's length is decided by the service,
+    // and a vamp is open-ended by definition.
+    if (type == CueType::control || type == CueType::streaming || hasUsableVamp())
         return 0.0;
 
     const auto once = trimmedLength();
@@ -140,6 +163,9 @@ std::vector<RoutePoint> Cue::effectiveRouting (int numFileChannels, int numDevic
 
 bool Cue::isPlayable() const noexcept
 {
+    if (type == CueType::control)
+        return ! outputMessages.empty();
+
     if (type == CueType::streaming)
         return streaming.provider.isNotEmpty() && streaming.uri.isNotEmpty();
 
@@ -239,6 +265,15 @@ juce::var Cue::toVar (const juce::File& showDirectory) const
     {
         juce::Array<juce::var> arr;
 
+        for (const auto& m : outputMessages)
+            arr.add (m.toVar());
+
+        o->setProperty ("outputMessages", arr);
+    }
+
+    {
+        juce::Array<juce::var> arr;
+
         for (const auto& r : routing)
         {
             auto* p = new juce::DynamicObject();
@@ -319,6 +354,10 @@ Cue Cue::fromVar (const juce::var& v, const juce::File& showDirectory)
         c.link.duration = (double) l.getProperty ("duration", 3.0);
         c.link.shape    = fadeShapeFromString (l.getProperty ("shape", {}).toString());
     }
+
+    if (const auto* arr = get ("outputMessages").getArray())
+        for (const auto& item : *arr)
+            c.outputMessages.push_back (ControlMessage::fromVar (item));
 
     if (const auto* arr = get ("routing").getArray())
     {

@@ -2,6 +2,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include "Model/ControlMessage.h"
 #include "Model/FadeCurve.h"
 
 namespace cp
@@ -71,7 +72,8 @@ struct RoutePoint
 enum class CueType
 {
     audioFile = 0,  ///< A file on disk, decoded and mixed by our own engine.
-    streaming       ///< A track/album/playlist on a streaming service. See StreamingRef.
+    streaming,      ///< A track/album/playlist on a streaming service. See StreamingRef.
+    control         ///< No audio at all: only the MIDI/OSC messages in outputMessages.
 };
 
 juce::String toString (CueType t);
@@ -193,6 +195,12 @@ public:
     //== Link ==================================================================
     Link link;
 
+    //== Outgoing control =====================================================
+    /** MIDI and OSC messages sent when this cue fires. Available on every cue, so a sound
+        cue can fly a lighting cue without a separate control cue beside it in the list;
+        a cue of type `control` is simply one that has these and nothing else. */
+    std::vector<ControlMessage> outputMessages;
+
     //== Routing ===============================================================
     /** Sparse source-channel -> output-channel matrix. Empty means "use the default",
         which is a straight 1:1 map of file channels onto the first device outputs. */
@@ -209,8 +217,13 @@ public:
     bool hasUsableVamp() const noexcept;
 
     /** Playing length in seconds *ignoring* vamp repeats (which are open-ended), including
-        loop repeats when the loop count is finite. Returns 0 for an endless cue. */
+        loop repeats when the loop count is finite. Returns 0 for an endless cue and for a
+        control cue, which has no duration at all — check isOpenEnded() to tell them apart. */
     double playbackLength() const noexcept;
+
+    /** True when nothing can predict when this cue finishes: a streaming cue, an armed
+        vamp, or an infinite loop. Links from an open-ended cue cannot be pre-scheduled. */
+    bool isOpenEnded() const noexcept;
 
     /** Builds the effective routing: `routing` when non-empty, otherwise a 1:1 default
         for @p numFileChannels onto @p numDeviceOutputs. */
