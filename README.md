@@ -224,6 +224,10 @@ outgoing messages on cues, control cues, and a Companion-facing status feed. Don
 the streaming account and the show's new-cue fade defaults, typed exact times under the
 waveform, and a stop shortcut.
 
+**v0.3.0** — sub-cues on every cue with a restyled, nested cue list; standby can sit on a
+cue or on one of its sub-cues; sliders no longer take the scroll wheel until clicked; link
+modes named for what they do.
+
 Not yet built:
 
 - **Phase 3 — streaming provider adapters.** OAuth PKCE and transport for the four services
