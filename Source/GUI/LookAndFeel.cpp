@@ -108,6 +108,37 @@ void SimpleCueLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, in
 }
 
 //==============================================================================
+ClickToAdjustSlider::ClickToAdjustSlider()
+{
+    // Clicking is what arms the wheel, so the slider has to be able to take focus.
+    setWantsKeyboardFocus (true);
+}
+
+void ClickToAdjustSlider::mouseWheelMove (const juce::MouseEvent& e,
+                                          const juce::MouseWheelDetails& wheel)
+{
+    if (! hasKeyboardFocus (false))
+    {
+        // Hand the gesture on so the panel underneath scrolls as the operator expects,
+        // rather than swallowing it and appearing to do nothing.
+        juce::Component::mouseWheelMove (e, wheel);
+        return;
+    }
+
+    juce::Slider::mouseWheelMove (e, wheel);
+}
+
+void ClickToAdjustSlider::focusGained (FocusChangeType)
+{
+    repaint();
+}
+
+void ClickToAdjustSlider::focusLost (FocusChangeType)
+{
+    repaint();
+}
+
+//==============================================================================
 juce::String formatTime (double seconds)
 {
     if (seconds < 0.0 || std::isnan (seconds))

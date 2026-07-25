@@ -42,18 +42,18 @@ private:
     juce::Label pathLabel { {}, "Audio path" };
     juce::ComboBox pathBox;
     juce::Label inputLabel { {}, "First input" };
-    juce::Slider inputSlider;
+    ClickToAdjustSlider inputSlider;
     juce::Label channelsLabel { {}, "Channels" };
-    juce::Slider channelsSlider;
+    ClickToAdjustSlider channelsSlider;
     juce::Label deviceLabel { {}, "Connect device" };
     juce::TextEditor deviceEditor;
 
     juce::Label defaultsHeader { {}, "NEW CUE DEFAULTS (SAVED WITH THE SHOW)" };
     juce::Label defaultsNote;
     juce::Label fadeInLabel { {}, "Fade in" };
-    juce::Slider fadeInSlider;
+    ClickToAdjustSlider fadeInSlider;
     juce::Label fadeOutLabel { {}, "Fade out" };
-    juce::Slider fadeOutSlider;
+    ClickToAdjustSlider fadeOutSlider;
     juce::Label fadeShapeLabel { {}, "Curve" };
     juce::ComboBox fadeShapeBox;
 

@@ -85,6 +85,10 @@ private:
         This is what GO does. */
     bool fireStandbyStep();
 
+    /** Fires a whole cue, as a double-click or an incoming goCue does. Honours the cue's
+        "firing this cue also fires its Play sub-cue" setting. */
+    bool fireCueAsWhole (int index);
+
     /** Resolves the cue an incoming action refers to, by list position when the transport
         gave one (DMX) and by cue number otherwise. Returns -1 if there is no such cue. */
     int resolveControlTarget (const ControlAction& action) const;

@@ -17,7 +17,8 @@ around cues, fades, links, loops and vamps.
 
 - **Cues** — an audio file with adjustable in and out points, gain and pre-wait.
 - **Fades** — automatic fade-in and fade-out with five curve shapes.
-- **Links** — how a cue hands over to the next: auto-continue, auto-follow, or a crossfade.
+- **Links** — how a cue hands over to the next: fire it instantly, fire it at the end, or
+  crossfade into it.
 - **Loops** — repeat a cue a set number of times, or forever.
 - **Vamps** — circle a section of a cue until the operator calls for it to continue.
 - **Cue lifecycles** — a cue expands into the steps it actually needs (play, devamp, end),
@@ -38,20 +39,23 @@ A cue is not always a single event. A vamped cue is played, held, released, and 
 ended, and each of those is a separate GO. So a cue expands into the steps it actually
 needs, and GO walks them:
 
-| Step | When it exists |
+| Sub-cue | When it appears |
 |---|---|
-| **Play** | Always |
-| **Devamp** | Once per vamp the cue has |
-| **End** | Only when the cue cannot end by itself — an infinite loop, a vamp, a streaming cue — or when the cue is set to always have one |
+| **Play cue** | Always |
+| **Devamp** | Only when the cue has a vamp to release |
+| **Fade/Stop** | Always — even a cue that would end by itself can be wanted out early |
 
-That last rule is deliberate. Giving every cue an End step would double the number of GOs
-in a show of one-shot stingers, so a cue that stops on its own doesn't get one. Ending is
-either a fade over a per-cue time or a hard stop.
+Ending is either a fade over a per-cue time or a hard stop.
 
-Cues with more than one step show a disclosure triangle; the standby cue opens on its own,
-so you can see what the next few GOs will do before committing to the first. Clicking a
-step stands it by directly, for when a rehearsal needs to jump straight to "release this
-vamp".
+Standby sits either on the cue itself or on one of its sub-cues, and the marker shows
+exactly which. **Firing a cue also fires its Play sub-cue** — a per-cue checkbox, on by
+default; turn it off to make the cue a container that does nothing until one of its
+sub-cues is fired. Because firing the cue already played it, GO skips the Play sub-cue and
+offers the next one.
+
+Every cue shows a disclosure triangle; the standby cue opens on its own so you can see what
+the next few GOs will do. Clicking a sub-cue stands it by directly, for when a rehearsal
+needs to jump straight to "release this vamp".
 
 <table>
 <tr>

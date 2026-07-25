@@ -61,10 +61,11 @@ public:
 
     int  getStandbyIndex() const noexcept           { return standbyIndex; }
 
-    /** Which step of the standby cue's lifecycle GO would perform next. */
+    /** Where standby sits inside the cue: `cueHeaderStep` for the cue itself, otherwise
+        the index of one of its sub-cues. */
     int  getStandbyStep() const noexcept            { return standbyStep; }
 
-    /** Moves standby to a cue, at the first step of its lifecycle. */
+    /** Moves standby to a cue, at the cue itself rather than one of its sub-cues. */
     void setStandbyIndex (int index);
 
     /** Moves standby to a particular step of a particular cue. */
@@ -95,7 +96,7 @@ private:
     std::vector<Cue> cues;
     int selectedIndex { -1 };
     int standbyIndex  { -1 };
-    int standbyStep   { 0 };
+    int standbyStep   { cueHeaderStep };
 
     void clampPositions();
 

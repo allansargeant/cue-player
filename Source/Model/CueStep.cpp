@@ -9,11 +9,23 @@ std::vector<CueStep> buildCueSteps (const Cue& cue)
 {
     std::vector<CueStep> steps;
 
+    // A control cue is a single event: there is nothing to hold and nothing to fade.
+    if (cue.type == CueType::control)
+    {
+        CueStep step;
+        step.type = CueStepType::play;
+        step.label = "Fire messages";
+        step.detail = juce::String ((int) cue.outputMessages.size())
+                        + (cue.outputMessages.size() == 1 ? " message" : " messages");
+        steps.push_back (step);
+        return steps;
+    }
+
     // --- Play -----------------------------------------------------------------
     {
         CueStep step;
         step.type = CueStepType::play;
-        step.label = "Play";
+        step.label = "Play cue";
 
         if (cue.preWait > 0.0)
             step.detail = "after " + juce::String (cue.preWait, 2) + "s pre-wait";
@@ -23,7 +35,9 @@ std::vector<CueStep> buildCueSteps (const Cue& cue)
         steps.push_back (step);
     }
 
-    // --- Devamp, one per vamp -------------------------------------------------
+    // --- Devamp ---------------------------------------------------------------
+    // Only when there is a vamp to release. A devamp row on a cue with no vamp would be a
+    // step that does nothing, sitting in the operator's way on every cue in the show.
     if (cue.hasUsableVamp())
     {
         CueStep step;
@@ -36,17 +50,14 @@ std::vector<CueStep> buildCueSteps (const Cue& cue)
         steps.push_back (step);
     }
 
-    // --- End ------------------------------------------------------------------
-    const auto wantsEnd = cue.endStepMode == EndStepMode::always
-                       || (cue.endStepMode == EndStepMode::automatic && cue.isOpenEnded());
-
-    if (wantsEnd)
+    // --- Fade / Stop ----------------------------------------------------------
+    // Always. Even a cue that would end by itself can be wanted out early.
     {
         CueStep step;
         step.type = CueStepType::end;
-        step.label = "End";
+        step.label = "Fade/Stop";
         step.detail = cue.endAction == EndAction::hardStop
-                          ? "hard stop"
+                          ? juce::String ("hard stop")
                           : juce::String (cue.endFadeTime, 1) + "s fade out";
         steps.push_back (step);
     }

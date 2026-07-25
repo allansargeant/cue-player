@@ -109,7 +109,7 @@ void CueInspector::addRow (const juce::String& labelText, juce::Component& contr
 
 void CueInspector::buildControls()
 {
-    const auto configureTimeSlider = [] (juce::Slider& s, double max, const juce::String& suffix)
+    const auto configureTimeSlider = [] (ClickToAdjustSlider& s, double max, const juce::String& suffix)
     {
         s.setSliderStyle (juce::Slider::LinearBar);
         s.setRange (0.0, max, 0.001);
@@ -335,17 +335,14 @@ void CueInspector::buildControls()
     addSection ("Ending this cue");
     endSectionIndex = sectionLabels.size() - 1;
 
-    endStepModeBox.addItemList (endStepModeNames(), 1);
-    endStepModeBox.onChange = [this]
+    firePlayToggle.onClick = [this]
     {
-        editCue ([this] (Cue& c)
-                 { c.endStepMode = (EndStepMode) (endStepModeBox.getSelectedId() - 1); });
-        updateEnablement();
+        editCue ([this] (Cue& c) { c.firePlayWithCue = firePlayToggle.getToggleState(); });
 
         if (onCueEdited != nullptr)
             onCueEdited();
     };
-    addRow ("End step", endStepModeBox, 2);
+    addRow ("", firePlayToggle, 2);
 
     endActionBox.addItemList (endActionNames(), 1);
     endActionBox.onChange = [this]
@@ -911,7 +908,7 @@ void CueInspector::refresh()
     vampReleaseBox.setSelectedId (cue->vampRelease == VampRelease::immediately ? 2 : 1,
                                   juce::dontSendNotification);
 
-    endStepModeBox.setSelectedId ((int) cue->endStepMode + 1, juce::dontSendNotification);
+    firePlayToggle.setToggleState (cue->firePlayWithCue, juce::dontSendNotification);
     endActionBox.setSelectedId ((int) cue->endAction + 1, juce::dontSendNotification);
     endFadeSlider.setValue (cue->endFadeTime, juce::dontSendNotification);
 

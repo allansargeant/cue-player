@@ -98,19 +98,20 @@ private:
     juce::TextButton chooseFileButton { "Choose file..." };
 
     juce::TextEditor numberEditor, nameEditor, notesEditor;
-    juce::Slider gainSlider, preWaitSlider;
-    juce::Slider inPointSlider, outPointSlider;
-    juce::Slider fadeInSlider, fadeOutSlider;
+    ClickToAdjustSlider gainSlider, preWaitSlider;
+    ClickToAdjustSlider inPointSlider, outPointSlider;
+    ClickToAdjustSlider fadeInSlider, fadeOutSlider;
     juce::ComboBox fadeInShapeBox, fadeOutShapeBox;
     juce::ToggleButton loopToggle { "Loop the whole cue" };
-    juce::Slider loopCountSlider;
+    ClickToAdjustSlider loopCountSlider;
     juce::ToggleButton vampToggle { "Vamp a section until released" };
-    juce::Slider vampStartSlider, vampEndSlider;
+    ClickToAdjustSlider vampStartSlider, vampEndSlider;
     juce::ComboBox vampReleaseBox;
-    juce::ComboBox endActionBox, endStepModeBox;
-    juce::Slider endFadeSlider;
+    juce::ComboBox endActionBox;
+    juce::ToggleButton firePlayToggle { "Firing this cue also fires its Play sub-cue" };
+    ClickToAdjustSlider endFadeSlider;
     juce::ComboBox linkModeBox, linkTargetBox, linkShapeBox;
-    juce::Slider linkDelaySlider, linkDurationSlider;
+    ClickToAdjustSlider linkDelaySlider, linkDurationSlider;
 
     // Streaming cues. Provider, audio path and capture channels are installation settings
     // and live in the Settings window, not here.

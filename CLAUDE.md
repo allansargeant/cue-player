@@ -39,11 +39,12 @@ alone deliberately: renaming it touches every file for no user-visible gain.
   them and mangles the text. Em dashes in comments are fine; in literals they are not.
 
 ## Cue lifecycles
-- A cue's steps are **derived** by `buildCueSteps()`, never stored. Play always; one Devamp
-  per vamp; End only when the cue cannot end by itself (or `endStepMode` forces it). Adding
-  an End step to every cue would double the GOs in a show of one-shot stingers.
-- Standby is a **(cue, step)** pair. `CueList::modify()` re-clamps it, because an edit can
-  remove the step standby is sitting on (turning a vamp off drops its devamp).
+- A cue's sub-cues are **derived** by `buildCueSteps()`, never stored. Play cue always;
+  Devamp only when the cue has a vamp; Fade/Stop always.
+- Standby is a **(cue, step)** pair where step `cueHeaderStep` (-1) means the cue itself.
+  `CueList::modify()` re-clamps it, because an edit can remove the sub-cue standby sits on.
+- `Cue::firePlayWithCue` decides whether firing the cue also plays it. When on, standby
+  skips the Play sub-cue after the header, so the same audio is never offered twice.
 - `MainComponent::fireStandbyStep()` is what GO does — the engine no longer owns sequencing.
 
 ## Rules for the control layer

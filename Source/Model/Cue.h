@@ -80,18 +80,6 @@ juce::String toString (EndAction);
 EndAction endActionFromString (const juce::String&);
 juce::StringArray endActionNames();
 
-/** Whether a cue gets an End step in its lifecycle. */
-enum class EndStepMode
-{
-    automatic = 0,  ///< Only when the cue cannot end by itself. The sensible default.
-    always,         ///< Always, so the operator can stop it early from the GO sequence.
-    never           ///< Never; the cue is stopped some other way.
-};
-
-juce::String toString (EndStepMode);
-EndStepMode endStepModeFromString (const juce::String&);
-juce::StringArray endStepModeNames();
-
 //==============================================================================
 /** What a cue actually plays. */
 enum class CueType
@@ -186,12 +174,15 @@ public:
     VampRelease vampRelease { VampRelease::atEndOfPass };
 
     //== End of life ===========================================================
-    /** How this cue's End step stops it, and whether it has one at all. See buildCueSteps:
-        a cue that ends by itself does not need an End step, and giving it one would double
-        the number of GOs in a show of one-shot stingers. */
-    EndAction   endAction { EndAction::fadeOut };
-    double      endFadeTime { 3.0 };
-    EndStepMode endStepMode { EndStepMode::automatic };
+    /** How this cue's Fade/Stop sub-cue stops it. Every cue has one, because even a cue
+        that would end by itself can be wanted out early. */
+    EndAction endAction { EndAction::fadeOut };
+    double    endFadeTime { 3.0 };
+
+    /** Whether firing the cue itself also fires its Play sub-cue. On by default, which is
+        what anyone expects of a cue. Turn it off to make the cue a container that does
+        nothing until one of its sub-cues is fired. */
+    bool firePlayWithCue { true };
 
     //== Link ==================================================================
     Link link;

@@ -13,11 +13,15 @@ CueListComponent::CueListComponent (CueList& list, AudioEngine& engine)
     table.getViewport()->setScrollBarsShown (true, false);
 
     auto& header = table.getHeader();
+    header.addColumn ("",        columnDelete,  26,  26,  26,
+                      juce::TableHeaderComponent::notResizableOrSortable);
+    header.addColumn ("",        columnIcon,    28,  28,  28,
+                      juce::TableHeaderComponent::notResizableOrSortable);
     header.addColumn ("",        columnStatus,  74,  60,  120);
     header.addColumn ("Cue",     columnNumber,  62,  40,  120);
     header.addColumn ("Name",    columnName,    260, 120, 900);
     header.addColumn ("Source",  columnFile,    200, 100, 700);
-    header.addColumn ("Pre",     columnPreWait, 56,  44,  90);
+    header.addColumn ("Pre",     columnPreWait, 80,  70,  120);
     header.addColumn ("Length",  columnLength,  84,  60,  140);
     header.addColumn ("Fades",   columnFades,   92,  60,  160);
     header.addColumn ("Repeat",  columnLoop,    108, 70,  200);
@@ -84,12 +88,11 @@ void CueListComponent::rebuildRows()
         if (cue == nullptr)
             continue;
 
-        displayRows.push_back ({ i, -1 });
+        displayRows.push_back ({ i, cueHeaderStep });
 
-        // A cue with a single step has no lifecycle worth showing: Play is the whole story.
         const auto steps = cueList.stepsFor (i);
 
-        if (steps.size() > 1 && isExpanded (*cue))
+        if (isExpanded (*cue))
             for (int s = 0; s < (int) steps.size(); ++s)
                 displayRows.push_back ({ i, s });
     }
@@ -121,6 +124,95 @@ juce::Rectangle<int> CueListComponent::getTwistyBounds (int width, int height) c
 {
     juce::ignoreUnused (width);
     return juce::Rectangle<int> (4, (height - 12) / 2, 12, 12);
+}
+
+
+void CueListComponent::drawDeleteCross (juce::Graphics& g, juce::Rectangle<int> area,
+                                        bool highlighted) const
+{
+    const auto cross = area.withSizeKeepingCentre (10, 10).toFloat();
+
+    g.setColour (highlighted ? colours::stop.brighter (0.4f) : colours::stop.withAlpha (0.85f));
+    g.drawLine (cross.getX(), cross.getY(), cross.getRight(), cross.getBottom(), 1.8f);
+    g.drawLine (cross.getX(), cross.getBottom(), cross.getRight(), cross.getY(), 1.8f);
+}
+
+void CueListComponent::drawTypeIcon (juce::Graphics& g, juce::Rectangle<int> area,
+                                     const Cue& cue, bool isSubCue, CueStepType stepType) const
+{
+    const auto box = area.withSizeKeepingCentre (14, 14).toFloat();
+
+    if (isSubCue)
+    {
+        // Sub-cues take their colour from what they do, so the eye can find the devamp in
+        // a long list without reading any text.
+        const auto colour = stepType == CueStepType::play   ? colours::go
+                          : stepType == CueStepType::devamp ? colours::vamp
+                                                             : colours::stop;
+
+        g.setColour (colour.withAlpha (0.9f));
+
+        // A small speaker: a box with a cone, matching the parent's audio icon at half
+        // weight so it reads as "part of the cue above".
+        juce::Path speaker;
+        speaker.addRectangle (box.getX() + 1.0f, box.getCentreY() - 2.0f, 3.0f, 4.0f);
+        speaker.addTriangle (box.getX() + 8.0f, box.getCentreY() - 5.0f,
+                             box.getX() + 8.0f, box.getCentreY() + 5.0f,
+                             box.getX() + 4.0f, box.getCentreY());
+        speaker.addRectangle (box.getX() + 4.0f, box.getCentreY() - 2.0f, 4.0f, 4.0f);
+        g.fillPath (speaker);
+        return;
+    }
+
+    switch (cue.type)
+    {
+        case CueType::control:
+            // Concentric arcs: something being sent out rather than played.
+            g.setColour (colours::standby);
+            for (int i = 0; i < 3; ++i)
+                g.drawEllipse (box.reduced ((float) i * 2.2f), 1.2f);
+            break;
+
+        case CueType::streaming:
+            g.setColour (colours::loop);
+            g.drawEllipse (box, 1.4f);
+            g.fillEllipse (box.withSizeKeepingCentre (4.0f, 4.0f));
+            break;
+
+        case CueType::audioFile:
+        default:
+        {
+            g.setColour (cue.audioFile.existsAsFile() ? colours::textDim : colours::stop);
+            juce::Path speaker;
+            speaker.addRectangle (box.getX(), box.getCentreY() - 2.5f, 3.5f, 5.0f);
+            // Cone opening away from the body, so it reads as a speaker rather than as an
+            // arrow pointing right.
+            speaker.addTriangle (box.getX() + 8.5f, box.getCentreY() - 6.0f,
+                                 box.getX() + 8.5f, box.getCentreY() + 6.0f,
+                                 box.getX() + 3.5f, box.getCentreY());
+            speaker.addRectangle (box.getX() + 3.5f, box.getCentreY() - 2.5f, 5.0f, 5.0f);
+            g.fillPath (speaker);
+            break;
+        }
+    }
+}
+
+void CueListComponent::drawTimeCell (juce::Graphics& g, juce::Rectangle<int> area,
+                                     double seconds) const
+{
+    const auto isZero = seconds <= 0.0001;
+
+    g.setColour (isZero ? colours::textDim.withAlpha (0.35f) : colours::text);
+    g.setFont (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 11.5f,
+                                  isZero ? juce::Font::plain : juce::Font::bold));
+
+    const auto total = juce::jmax (0.0, seconds);
+    const auto hundredths = (int) std::fmod (total * 100.0, 100.0);
+    const auto secs = (int) std::fmod (total, 60.0);
+    const auto minutes = (int) (total / 60.0);
+
+    g.drawText (juce::String::formatted ("%02d:%02d.%02d", minutes, secs, hundredths),
+                area, juce::Justification::centredRight);
 }
 
 //==============================================================================
@@ -156,8 +248,6 @@ void CueListComponent::paintRowBackground (juce::Graphics& g, int row, int width
         return;
 
     const auto& display = displayRows[(size_t) row];
-    const auto numSteps = (int) cueList.stepsFor (display.cueIndex).size();
-    const auto expanded = numSteps > 1 && ! display.isHeader();
 
     // Step rows sit in a slightly recessed band so a cue and its lifecycle read as one
     // block rather than as a run of unrelated lines.
@@ -173,22 +263,22 @@ void CueListComponent::paintRowBackground (juce::Graphics& g, int row, int width
     // lifecycle is collapsed or at its start, otherwise the step itself.
     const auto standbyCue = cueList.getStandbyIndex();
     const auto standbyStep = cueList.getStandbyStep();
-    const auto stepsVisible = numSteps > 1
-                           && std::any_of (displayRows.begin(), displayRows.end(),
-                                           [&display] (const DisplayRow& r)
-                                           { return r.cueIndex == display.cueIndex && ! r.isHeader(); });
+
+    // Standby sits on an exact row now - the cue itself, or one of its sub-cues - so the
+    // marker goes where GO will actually act, with no guessing when things are collapsed.
+    const auto collapsedOntoHeader = display.isHeader() && standbyStep != cueHeaderStep
+                                  && ! std::any_of (displayRows.begin(), displayRows.end(),
+                                                    [&display] (const DisplayRow& r)
+                                                    { return r.cueIndex == display.cueIndex && ! r.isHeader(); });
 
     const auto isStandbyRow = display.cueIndex == standbyCue
-                           && (stepsVisible ? (display.stepIndex == standbyStep)
-                                            : display.isHeader());
+                           && (display.stepIndex == standbyStep || collapsedOntoHeader);
 
     if (isStandbyRow)
     {
         g.setColour (colours::standby);
         g.fillRect (0, 0, 4, height);
     }
-
-    juce::ignoreUnused (expanded);
 
     g.setColour (colours::outline.withAlpha (display.isHeader() ? 0.5f : 0.2f));
     g.drawHorizontalLine (height - 1, 0.0f, (float) width);
@@ -205,7 +295,9 @@ void CueListComponent::paintCell (juce::Graphics& g, int row, int columnId, int 
     if (cue == nullptr)
         return;
 
-    // --- a lifecycle step -----------------------------------------------------
+    const auto fullCell = juce::Rectangle<int> (0, 0, width, height);
+
+    // --- a sub-cue ------------------------------------------------------------
     if (! display.isHeader())
     {
         const auto steps = cueList.stepsFor (display.cueIndex);
@@ -214,46 +306,65 @@ void CueListComponent::paintCell (juce::Graphics& g, int row, int columnId, int 
             return;
 
         const auto& step = steps[(size_t) display.stepIndex];
-        const auto stepArea = juce::Rectangle<int> (0, 0, width, height).reduced (6, 0);
+        const auto stepArea = fullCell.reduced (6, 0);
 
-        const auto stepColour = step.type == CueStepType::play   ? colours::go
-                              : step.type == CueStepType::devamp ? colours::vamp
-                                                                 : colours::stop;
+        switch (columnId)
+        {
+            case columnDelete:
+                break;   // Sub-cues belong to their cue; they are not deleted on their own.
 
-        if (columnId == columnNumber)
-        {
-            // Indented and drawn as a branch, so the step is visibly part of the cue above.
-            g.setColour (colours::outline);
-            g.drawLine (24.0f, 0.0f, 24.0f, (float) height * 0.5f, 1.0f);
-            g.drawLine (24.0f, (float) height * 0.5f, 34.0f, (float) height * 0.5f, 1.0f);
+            case columnIcon:
+                drawTypeIcon (g, fullCell, *cue, true, step.type);
+                break;
 
-            auto dot = juce::Rectangle<int> (38, (height - 8) / 2, 8, 8);
-            g.setColour (stepColour);
-            g.fillEllipse (dot.toFloat());
-        }
-        else if (columnId == columnName)
-        {
-            g.setColour (stepColour);
-            g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
-            g.drawText (step.label, stepArea.withTrimmedLeft (10),
-                        juce::Justification::centredLeft, true);
-        }
-        else if (columnId == columnFile)
-        {
-            g.setColour (colours::textDim);
-            g.setFont (juce::FontOptions (11.5f));
-            g.drawText (step.detail, stepArea, juce::Justification::centredLeft, true);
+            case columnName:
+                g.setColour (colours::text);
+                g.setFont (juce::FontOptions (12.5f));
+                // Indented, so the sub-cue reads as part of the cue above it.
+                g.drawText (step.label, stepArea.withTrimmedLeft (22),
+                            juce::Justification::centredLeft, true);
+                break;
+
+            case columnFile:
+                g.setColour (colours::textDim);
+                g.setFont (juce::FontOptions (11.5f));
+                g.drawText (step.detail, stepArea, juce::Justification::centredLeft, true);
+                break;
+
+            case columnPreWait:
+                if (step.type == CueStepType::play)
+                    drawTimeCell (g, stepArea, cue->preWait);
+                break;
+
+            case columnLength:
+                if (step.type == CueStepType::play)
+                    drawTimeCell (g, stepArea, cue->fadeInTime);
+                else if (step.type == CueStepType::end)
+                    drawTimeCell (g, stepArea,
+                                  cue->endAction == EndAction::hardStop ? 0.0 : cue->endFadeTime);
+                break;
+
+            default:
+                break;
         }
 
         return;
     }
 
-    const auto area = juce::Rectangle<int> (0, 0, width, height).reduced (6, 0);
+    const auto area = fullCell.reduced (6, 0);
     g.setFont (juce::FontOptions (12.5f));
     g.setColour (colours::text);
 
     switch (columnId)
     {
+        case columnDelete:
+            drawDeleteCross (g, fullCell, false);
+            break;
+
+        case columnIcon:
+            drawTypeIcon (g, fullCell, *cue, false, CueStepType::play);
+            break;
+
         case columnStatus:
         {
             const auto status = statusFor (*cue);
@@ -274,7 +385,6 @@ void CueListComponent::paintCell (juce::Graphics& g, int row, int columnId, int 
         {
             auto numberArea = area;
 
-            if (cueList.stepsFor (display.cueIndex).size() > 1)
             {
                 const auto twisty = getTwistyBounds (width, height);
                 juce::Path triangle;
@@ -343,8 +453,7 @@ void CueListComponent::paintCell (juce::Graphics& g, int row, int columnId, int 
         }
 
         case columnPreWait:
-            if (cue->preWait > 0.0)
-                g.drawText (juce::String (cue->preWait, 1) + "s", area, juce::Justification::centredLeft, true);
+            drawTimeCell (g, area, cue->preWait);
             break;
 
         case columnLength:
@@ -411,10 +520,10 @@ juce::String CueListComponent::describeLink (const Cue& cue) const
     switch (cue.link.mode)
     {
         case LinkMode::autoContinue:
-            return "continue -> " + target + (cue.link.delay > 0.0
+            return "instantly -> " + target + (cue.link.delay > 0.0
                                                   ? " +" + juce::String (cue.link.delay, 1) + "s" : "");
         case LinkMode::autoFollow:
-            return "follow -> " + target + (cue.link.delay > 0.0
+            return "at end -> " + target + (cue.link.delay > 0.0
                                                 ? " +" + juce::String (cue.link.delay, 1) + "s" : "");
         case LinkMode::crossfade:
             return "xfade " + juce::String (cue.link.duration, 1) + "s -> " + target;
@@ -436,8 +545,8 @@ void CueListComponent::cellClicked (int row, int columnId, const juce::MouseEven
     if (cue == nullptr)
         return;
 
-    // Clicking a step stands that step by, so an operator can jump straight to "release
-    // this vamp" without walking there.
+    // Clicking a sub-cue stands it by, so an operator can jump straight to "release this
+    // vamp" without walking there.
     if (! display.isHeader())
     {
         cueList.setStandbyPosition (display.cueIndex, display.stepIndex);
@@ -445,9 +554,17 @@ void CueListComponent::cellClicked (int row, int columnId, const juce::MouseEven
         return;
     }
 
-    if (columnId == columnNumber && cueList.stepsFor (display.cueIndex).size() > 1
+    if (columnId == columnDelete)
+    {
+        if (onCueDeleteRequested != nullptr)
+            onCueDeleteRequested (display.cueIndex);
+
+        return;
+    }
+
+    if (columnId == columnNumber
         && getTwistyBounds (table.getHeader().getColumnWidth (columnNumber),
-                            table.getRowHeight()).expanded (3, 3).contains (e.x, e.y))
+                            table.getRowHeight()).expanded (4, 4).contains (e.x, e.y))
     {
         toggleExpansion (*cue);
         return;

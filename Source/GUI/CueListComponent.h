@@ -34,6 +34,9 @@ public:
     /** Called when a cue's audio file should be chosen (double-click on an empty file). */
     std::function<void (int index)> onFileRequested;
 
+    /** Called when the operator clicks a row's delete cross. */
+    std::function<void (int cueIndex)> onCueDeleteRequested;
+
     void refresh();
 
     /** Scrolls to and selects the row for cue @p index (its header row). */
@@ -60,7 +63,9 @@ private:
 
     enum ColumnIds
     {
-        columnStatus = 1,
+        columnDelete = 1,
+        columnIcon,
+        columnStatus,
         columnNumber,
         columnName,
         columnFile,
@@ -70,6 +75,7 @@ private:
         columnLoop,
         columnLink
     };
+
 
     /** One visible line: either a cue's header or one step of its lifecycle.
 
@@ -88,6 +94,13 @@ private:
     bool isExpanded (const Cue& cue) const;
     void toggleExpansion (const Cue& cue);
     juce::Rectangle<int> getTwistyBounds (int width, int height) const;
+    void drawDeleteCross (juce::Graphics&, juce::Rectangle<int>, bool highlighted) const;
+    void drawTypeIcon (juce::Graphics&, juce::Rectangle<int>, const Cue&, bool isSubCue,
+                       CueStepType stepType) const;
+
+    /** Times read as 00:00.00 and drop back to a dim grey at zero, so the eye lands on the
+        cues that actually wait rather than on a wall of identical zeroes. */
+    void drawTimeCell (juce::Graphics&, juce::Rectangle<int>, double seconds) const;
 
     CueList& cueList;
     AudioEngine& audioEngine;

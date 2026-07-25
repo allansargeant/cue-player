@@ -49,8 +49,13 @@ MainComponent::MainComponent (juce::ApplicationProperties& props)
     transportBar.onAudioSetup   = [this] { showAudioSetup(); };
 
     cueListComponent.onSelectionChanged = [this] (int index) { inspector.setCueIndex (index); };
-    cueListComponent.onCueTriggered     = [this] (int index) { audioEngine.go (index); };
+    cueListComponent.onCueTriggered     = [this] (int index) { fireCueAsWhole (index); };
     cueListComponent.onFileRequested    = [this] (int index) { chooseFileForCue (index); };
+    cueListComponent.onCueDeleteRequested = [this] (int index)
+    {
+        show.getCueList().setSelectedIndex (index);
+        deleteSelectedCue();
+    };
 
     inspector.onCueEdited    = [this] { cueListComponent.refresh(); updateWindowTitle(); };
     inspector.onFileRequested = [this] (int index) { chooseFileForCue (index); };
@@ -187,12 +192,10 @@ void MainComponent::timerCallback()
         const auto name = standby->name.isNotEmpty() ? standby->name : juce::String ("(untitled)");
         const auto step = list.getStandbyStepInfo();
 
-        // Naming the step matters when a cue has several: "Storm builds" alone does not
-        // tell the operator whether the next GO starts it, releases it or ends it.
+        // Naming the sub-cue matters: "Storm builds" alone does not tell the operator
+        // whether the next GO starts it, releases its vamp or fades it out.
         transportBar.setStandbyText (standby->number,
-                                     step.has_value() && list.stepsFor (list.getStandbyIndex()).size() > 1
-                                         ? name + "   -   " + step->label
-                                         : name);
+                                     step.has_value() ? name + "   -   " + step->label : name);
     }
     else
     {
@@ -689,6 +692,26 @@ void MainComponent::captureScreenshots (const juce::File& outputDir, std::functi
 
 //==============================================================================
 
+
+bool MainComponent::fireCueAsWhole (int index)
+{
+    const auto* cue = show.getCueList().get (index);
+
+    if (cue == nullptr)
+        return false;
+
+    // A cue with its Play sub-cue detached is a container: triggering it from outside must
+    // not sneak the audio in anyway, or the setting would only work for GO.
+    if (! cue->firePlayWithCue)
+    {
+        show.getCueList().setStandbyIndex (index);
+        cueListComponent.refresh();
+        return true;
+    }
+
+    return audioEngine.go (index);
+}
+
 bool MainComponent::fireStandbyStep()
 {
     auto& list = show.getCueList();
@@ -700,11 +723,22 @@ bool MainComponent::fireStandbyStep()
 
     const auto steps = list.stepsFor (index);
     const auto stepIndex = list.getStandbyStep();
+    const auto cueId = cue->id;
+
+    // Standby on the cue itself: firing it plays the cue, unless the operator has turned
+    // that off and made the cue a container that does nothing on its own.
+    if (stepIndex == cueHeaderStep)
+    {
+        const auto played = cue->firePlayWithCue ? audioEngine.go (index) : true;
+
+        list.advanceStandby();
+        cueListComponent.refresh();
+        publishControlStatus();
+        return played;
+    }
 
     if (! juce::isPositiveAndBelow (stepIndex, (int) steps.size()))
         return false;
-
-    const auto cueId = cue->id;
     const auto endAction = cue->endAction;
     const auto endFade = cue->endFadeTime;
     bool performed = true;
@@ -795,7 +829,7 @@ void MainComponent::performControlAction (const ControlAction& action)
             break;
 
         case ControlActionType::goCue:
-            withTargetCue ([this] (int index) { audioEngine.go (index); });
+            withTargetCue ([this] (int index) { fireCueAsWhole (index); });
             break;
 
         case ControlActionType::stopAll:

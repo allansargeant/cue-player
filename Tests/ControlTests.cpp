@@ -1065,20 +1065,20 @@ void testStreamingSettings()
 //==============================================================================
 void testCueSteps()
 {
-    cptest::section ("cue lifecycle steps");
+    cptest::section ("cue sub-cues");
 
-    // A plain one-shot needs one GO and no more. Giving it an End step would double the
-    // number of presses in a show of stingers, which is the whole reason End is automatic.
+    // Every audio cue reads the same way: play it, and be able to stop it.
     {
         Cue cue;
         cue.fileDuration = 10.0;
         const auto steps = buildCueSteps (cue);
 
-        check (steps.size() == 1, "a finite one-shot has a single Play step");
-        check (steps[0].type == CueStepType::play, "and that step is Play");
+        check (steps.size() == 2, "a plain cue has Play and Fade/Stop");
+        check (steps[0].type == CueStepType::play, "the first sub-cue is Play");
+        check (steps[1].type == CueStepType::end, "the last sub-cue is Fade/Stop");
     }
 
-    // A cue that cannot end by itself must be stoppable from the GO sequence.
+    // Even a cue that would end by itself keeps its Fade/Stop: it can be wanted out early.
     {
         Cue cue;
         cue.fileDuration = 10.0;
@@ -1086,21 +1086,11 @@ void testCueSteps()
         cue.loopCount = 0;
         const auto steps = buildCueSteps (cue);
 
-        check (steps.size() == 2, "an infinite loop gains an End step");
-        check (steps[1].type == CueStepType::end, "the extra step is End");
+        check (steps.size() == 2, "an endless cue also has exactly Play and Fade/Stop");
+        check (steps.back().type == CueStepType::end, "and it ends with Fade/Stop");
     }
 
-    {
-        Cue cue;
-        cue.type = CueType::streaming;
-        cue.streaming.uri = "spotify:playlist:1";
-        const auto steps = buildCueSteps (cue);
-
-        check (steps.size() == 2, "a streaming cue gains an End step");
-        check (steps[1].type == CueStepType::end, "the extra step is End");
-    }
-
-    // Play, then release the hold, then end it.
+    // Devamp only appears where there is something to release.
     {
         Cue cue;
         cue.fileDuration = 60.0;
@@ -1110,14 +1100,21 @@ void testCueSteps()
 
         const auto steps = buildCueSteps (cue);
 
-        check (steps.size() == 3, "a vamped cue has play, devamp and end");
-        check (steps[0].type == CueStepType::play, "first step is Play");
-        check (steps[1].type == CueStepType::devamp, "second step is Devamp");
-        check (steps[2].type == CueStepType::end, "third step is End");
-        check (steps[1].detail.isNotEmpty(), "the devamp step says which region it releases");
+        check (steps.size() == 3, "a vamped cue has play, devamp and fade/stop");
+        check (steps[1].type == CueStepType::devamp, "the devamp sits between them");
+        check (steps[1].detail.isNotEmpty(), "and says which region it releases");
     }
 
-    // A vamp whose markers are unusable is not a vamp, so it earns no devamp step.
+    {
+        Cue cue;
+        cue.fileDuration = 60.0;
+
+        for (const auto& step : buildCueSteps (cue))
+            check (step.type != CueStepType::devamp,
+                   "a cue with no vamp shows no devamp sub-cue");
+    }
+
+    // A vamp whose markers are unusable is not a vamp.
     {
         Cue cue;
         cue.fileDuration = 60.0;
@@ -1125,34 +1122,24 @@ void testCueSteps()
         cue.vampStart = 30.0;
         cue.vampEnd = 20.0;      // backwards
 
-        const auto steps = buildCueSteps (cue);
-
-        for (const auto& step : steps)
-            check (step.type != CueStepType::devamp, "an unusable vamp gets no devamp step");
+        for (const auto& step : buildCueSteps (cue))
+            check (step.type != CueStepType::devamp, "an unusable vamp gets no devamp sub-cue");
     }
 
-    // Explicit overrides.
+    // A control cue is a single event.
+    {
+        Cue cue;
+        cue.type = CueType::control;
+        const auto steps = buildCueSteps (cue);
+
+        check (steps.size() == 1, "a control cue has one sub-cue");
+        check (steps[0].type == CueStepType::play, "and it is the fire step");
+    }
+
+    // The Fade/Stop description has to match what it will actually do.
     {
         Cue cue;
         cue.fileDuration = 10.0;
-        cue.endStepMode = EndStepMode::always;
-        check (buildCueSteps (cue).size() == 2, "endStepMode always forces an End step");
-
-        cue.endStepMode = EndStepMode::never;
-        cue.loopEnabled = true;
-        cue.loopCount = 0;
-        const auto steps = buildCueSteps (cue);
-
-        for (const auto& step : steps)
-            check (step.type != CueStepType::end,
-                   "endStepMode never suppresses End even on an endless cue");
-    }
-
-    // The End step's description has to match what it will actually do.
-    {
-        Cue cue;
-        cue.fileDuration = 10.0;
-        cue.endStepMode = EndStepMode::always;
         cue.endAction = EndAction::hardStop;
         check (buildCueSteps (cue).back().detail.containsIgnoreCase ("hard"),
                "a hard stop says so");
@@ -1166,7 +1153,7 @@ void testCueSteps()
 
 void testStandbyWalksTheLifecycle()
 {
-    cptest::section ("standby walks the lifecycle");
+    cptest::section ("standby walks cue and sub-cues");
 
     CueList list;
 
@@ -1192,53 +1179,70 @@ void testStandbyWalksTheLifecycle()
     list.insert (last);
     list.setStandbyIndex (0);
 
-    check (list.getStandbyIndex() == 0 && list.getStandbyStep() == 0, "standby starts at the top");
-    check (list.stepsFor (0).size() == 1, "the first cue has one step");
+    check (list.getStandbyIndex() == 0 && list.getStandbyStep() == cueHeaderStep,
+           "standby starts on the cue itself, not on a sub-cue");
+    check (list.stepsFor (0).size() == 2, "a plain cue has two sub-cues");
 
-    // A single-step cue hands straight on to the next.
+    // Firing the cue plays it, so standby skips the Play sub-cue and offers Fade/Stop.
     list.advanceStandby();
-    check (list.getStandbyIndex() == 1 && list.getStandbyStep() == 0,
-           "a one-step cue advances to the next cue");
+    check (list.getStandbyIndex() == 0 && list.getStandbyStep() == 1,
+           "standby skips Play, which firing the cue already did");
 
-    // The vamped cue is walked step by step before anything moves on.
-    check (list.stepsFor (1).size() == 3, "the vamped cue has three steps");
-
-    list.advanceStandby();
-    check (list.getStandbyIndex() == 1 && list.getStandbyStep() == 1,
-           "the second GO moves to the devamp step, not to the next cue");
-
-    const auto devampStep = list.getStandbyStepInfo();
-    check (devampStep.has_value() && devampStep->type == CueStepType::devamp,
-           "and that step really is the devamp");
+    const auto stepInfo = list.getStandbyStepInfo();
+    check (stepInfo.has_value() && stepInfo->type == CueStepType::end,
+           "and lands on Fade/Stop");
 
     list.advanceStandby();
-    check (list.getStandbyIndex() == 1 && list.getStandbyStep() == 2, "then the end step");
+    check (list.getStandbyIndex() == 1 && list.getStandbyStep() == cueHeaderStep,
+           "then moves to the next cue");
+
+    // With the checkbox off, the cue is a container: standby offers Play as a sub-cue.
+    list.modifyByID (vampedId, [] (Cue& c) { c.firePlayWithCue = false; });
+    list.setStandbyIndex (1);
+    list.advanceStandby();
+    check (list.getStandbyStep() == 0, "a cue that does not fire Play offers it as a sub-cue");
+
+    list.modifyByID (vampedId, [] (Cue& c) { c.firePlayWithCue = true; });
+
+    // The vamped cue: header, then devamp, then fade/stop.
+    list.setStandbyIndex (1);
+    check (list.stepsFor (1).size() == 3, "the vamped cue has three sub-cues");
 
     list.advanceStandby();
-    check (list.getStandbyIndex() == 2 && list.getStandbyStep() == 0,
+    check (list.getStandbyStep() == 1, "standby skips Play and lands on the devamp");
+
+    const auto devamp = list.getStandbyStepInfo();
+    check (devamp.has_value() && devamp->type == CueStepType::devamp, "and it is the devamp");
+
+    list.advanceStandby();
+    check (list.getStandbyStep() == 2, "then Fade/Stop");
+
+    list.advanceStandby();
+    check (list.getStandbyIndex() == 2 && list.getStandbyStep() == cueHeaderStep,
            "only then does it move on to the next cue");
 
-    // The end of the list is a wall, not a wrap: a stray GO must not restart the show.
-    list.advanceStandby();
-    list.advanceStandby();
+    // The end of the list is a wall, not a wrap.
+    for (int i = 0; i < 5; ++i)
+        list.advanceStandby();
+
     check (list.getStandbyIndex() == 2, "standby stops at the last cue");
 
-    // Editing a cue can remove the step standby is sitting on.
+    // Editing a cue can remove the sub-cue standby is sitting on.
     list.setStandbyPosition (1, 2);
-    check (list.getStandbyStep() == 2, "standby can be placed on the end step");
+    check (list.getStandbyStep() == 2, "standby can be placed on the last sub-cue");
 
     list.modifyByID (vampedId, [] (Cue& c) { c.vampEnabled = false; });
     check (list.getStandbyStep() < (int) list.stepsFor (1).size(),
-           "turning the vamp off pulls standby back into range");
+           "removing the vamp pulls standby back into range");
 
-    // Jumping straight to a step, which is what clicking one in the list does.
+    // Clicking a sub-cue stands it by directly.
     list.setStandbyPosition (1, 1);
-    check (list.getStandbyIndex() == 1, "standby can jump to a specific cue");
-    check (list.getStandbyStep() <= 1, "and to a specific step within it");
+    check (list.getStandbyIndex() == 1 && list.getStandbyStep() == 1,
+           "standby can jump straight to a sub-cue");
 
-    // Setting standby by cue always lands on the start of its lifecycle.
+    // Selecting a cue always returns standby to the cue itself.
     list.setStandbyIndex (1);
-    check (list.getStandbyStep() == 0, "selecting a cue stands by its first step");
+    check (list.getStandbyStep() == cueHeaderStep, "selecting a cue stands by the cue itself");
 }
 
 } // namespace

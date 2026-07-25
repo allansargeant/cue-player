@@ -123,7 +123,7 @@ void CueList::clear()
     cues.clear();
     selectedIndex = -1;
     standbyIndex  = -1;
-    standbyStep   = 0;
+    standbyStep   = cueHeaderStep;
     sendChangeMessage();
 }
 
@@ -150,14 +150,14 @@ void CueList::setSelectedIndex (int index)
 
 void CueList::setStandbyIndex (int index)
 {
-    setStandbyPosition (index, 0);
+    setStandbyPosition (index, cueHeaderStep);
 }
 
 void CueList::setStandbyPosition (int index, int step)
 {
     const auto clampedIndex = isEmpty() ? -1 : juce::jlimit (-1, size() - 1, index);
     const auto numSteps = (int) stepsFor (clampedIndex).size();
-    const auto clampedStep = numSteps > 0 ? juce::jlimit (0, numSteps - 1, step) : 0;
+    const auto clampedStep = juce::jlimit (cueHeaderStep, juce::jmax (cueHeaderStep, numSteps - 1), step);
 
     if (clampedIndex == standbyIndex && clampedStep == standbyStep)
         return;
@@ -190,11 +190,24 @@ void CueList::advanceStandby()
     if (isEmpty())
         return;
 
-    // Walk the rest of this cue's lifecycle before moving on: play, then each devamp, then
-    // the end. Only when those run out does standby step to the next cue.
-    const auto numSteps = (int) stepsFor (standbyIndex).size();
+    const auto steps = stepsFor (standbyIndex);
+    const auto numSteps = (int) steps.size();
 
-    if (standbyStep + 1 < numSteps)
+    if (standbyStep == cueHeaderStep)
+    {
+        const auto* cue = get (standbyIndex);
+
+        // Firing the cue itself already fired its Play sub-cue, so standby skips over it
+        // rather than offering to play the same thing twice.
+        const auto firstSubCue = (cue != nullptr && cue->firePlayWithCue) ? 1 : 0;
+
+        if (firstSubCue < numSteps)
+        {
+            setStandbyPosition (standbyIndex, firstSubCue);
+            return;
+        }
+    }
+    else if (standbyStep + 1 < numSteps)
     {
         setStandbyPosition (standbyIndex, standbyStep + 1);
         return;
@@ -203,9 +216,9 @@ void CueList::advanceStandby()
     // Deliberately stops on the last cue rather than wrapping: an accidental extra GO at
     // the end of a show should do nothing, not restart the top of the list.
     if (standbyIndex < size() - 1)
-        setStandbyPosition (standbyIndex + 1, 0);
+        setStandbyPosition (standbyIndex + 1, cueHeaderStep);
     else
-        setStandbyPosition (size() - 1, juce::jmax (0, numSteps - 1));
+        setStandbyPosition (size() - 1, juce::jmax (cueHeaderStep, numSteps - 1));
 }
 
 const Cue* CueList::getStandbyCue() const noexcept
@@ -232,17 +245,17 @@ void CueList::clampPositions()
     {
         selectedIndex = -1;
         standbyIndex  = -1;
-        standbyStep   = 0;
+        standbyStep   = cueHeaderStep;
         return;
     }
 
     selectedIndex = juce::jlimit (-1, size() - 1, selectedIndex);
     standbyIndex  = juce::jlimit (-1, size() - 1, standbyIndex);
 
-    // Editing a cue can remove a step - turning a vamp off drops its devamp - so the
+    // Editing a cue can remove a sub-cue - turning a vamp off drops its devamp - so the
     // standby step has to be pulled back into range rather than pointing past the end.
     const auto numSteps = (int) stepsFor (standbyIndex).size();
-    standbyStep = numSteps > 0 ? juce::jlimit (0, numSteps - 1, standbyStep) : 0;
+    standbyStep = juce::jlimit (cueHeaderStep, juce::jmax (cueHeaderStep, numSteps - 1), standbyStep);
 }
 
 //==============================================================================
@@ -266,7 +279,7 @@ void CueList::restoreFromVar (const juce::var& v, const juce::File& showDirector
 
     selectedIndex = isEmpty() ? -1 : 0;
     standbyIndex  = isEmpty() ? -1 : 0;
-    standbyStep   = 0;
+    standbyStep   = cueHeaderStep;
 
     sendChangeMessage();
 }

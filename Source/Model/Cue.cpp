@@ -28,7 +28,12 @@ LinkMode linkModeFromString (const juce::String& s)
 
 juce::StringArray linkModeNames()
 {
-    return { "None", "Auto-continue", "Auto-follow", "Crossfade" };
+    // Named for what they do rather than for the jargon. "Auto-follow" tells an operator
+    // nothing about when the next cue actually fires.
+    return { "Don't fire next cue",
+             "Fire next cue instantly",
+             "Fire next cue at end",
+             "Crossfade into next cue" };
 }
 
 //==============================================================================
@@ -56,30 +61,6 @@ EndAction endActionFromString (const juce::String& s)
 juce::StringArray endActionNames()
 {
     return { "Fade out", "Hard stop" };
-}
-
-juce::String toString (EndStepMode m)
-{
-    switch (m)
-    {
-        case EndStepMode::always: return "always";
-        case EndStepMode::never:  return "never";
-        case EndStepMode::automatic:
-        default:                  return "automatic";
-    }
-}
-
-EndStepMode endStepModeFromString (const juce::String& s)
-{
-    if (s == "always") return EndStepMode::always;
-    if (s == "never")  return EndStepMode::never;
-
-    return EndStepMode::automatic;
-}
-
-juce::StringArray endStepModeNames()
-{
-    return { "Only when it cannot end itself", "Always", "Never" };
 }
 
 //==============================================================================
@@ -277,7 +258,7 @@ juce::var Cue::toVar (const juce::File& showDirectory) const
 
     o->setProperty ("endAction",   toString (endAction));
     o->setProperty ("endFadeTime", endFadeTime);
-    o->setProperty ("endStepMode", toString (endStepMode));
+    o->setProperty ("firePlayWithCue", firePlayWithCue);
 
     {
         auto* l = new juce::DynamicObject();
@@ -369,7 +350,7 @@ Cue Cue::fromVar (const juce::var& v, const juce::File& showDirectory)
 
     c.endAction   = endActionFromString (get ("endAction").toString());
     c.endFadeTime = juce::jlimit (0.0, 300.0, (double) v.getProperty ("endFadeTime", 3.0));
-    c.endStepMode = endStepModeFromString (get ("endStepMode").toString());
+    c.firePlayWithCue = (bool) v.getProperty ("firePlayWithCue", true);
 
     if (const auto l = get ("link"); l.isObject())
     {

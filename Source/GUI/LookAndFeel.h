@@ -44,6 +44,23 @@ public:
                            juce::Slider&) override;
 };
 
+/** A slider that ignores the scroll wheel until it has been clicked.
+
+    Inside a scrolling inspector an ordinary slider grabs the wheel as the pointer passes
+    over it, so scrolling down the panel silently rewrites whatever the pointer crossed -
+    a cue's gain, a fade time. Requiring a click first makes scrolling safe and costs one
+    click when the value really is being edited.
+*/
+class ClickToAdjustSlider : public juce::Slider
+{
+public:
+    ClickToAdjustSlider();
+
+    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void focusGained (FocusChangeType) override;
+    void focusLost (FocusChangeType) override;
+};
+
 /** Formats seconds as mm:ss.t, or h:mm:ss.t past an hour. Negative input gives "--:--". */
 juce::String formatTime (double seconds);
 

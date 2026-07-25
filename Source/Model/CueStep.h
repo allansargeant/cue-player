@@ -27,20 +27,20 @@ struct CueStep
     juce::String detail;            ///< Secondary text, e.g. the fade time.
 };
 
-/** Builds the step list for @p cue.
+/** Builds the sub-cue list for @p cue.
 
-    A step only exists when the operator actually has to do something:
+      - **Play cue** always.
+      - **Devamp** only when the cue actually has a vamp to release; there is nothing to
+        show otherwise. (One today. The list is built so that several vamp regions per cue
+        would need no change here or in anything that walks it.)
+      - **Fade/Stop** always, so every cue can be ended from the list whether or not it
+        would have stopped by itself.
 
-      - **Play** always.
-      - **Devamp** once per vamp the cue has. (One today; the list is built so that adding
-        more vamp regions later needs no change here or in anything that walks it.)
-      - **End** only when the cue cannot end by itself - an infinite loop, an unreleased
-        vamp, a streaming cue - or when the cue asks for one explicitly.
-
-    That last rule matters. Giving every cue an End step would double the number of GOs in
-    a show of one-shot stingers, which is exactly the sort of "helpful" design that gets an
-    operator into trouble at speed.
+    A control cue is a single event and gets one step.
 */
 std::vector<CueStep> buildCueSteps (const Cue& cue);
+
+/** Standby sits on the cue itself, not on one of its sub-cues. */
+static constexpr int cueHeaderStep = -1;
 
 } // namespace cp
