@@ -1,0 +1,334 @@
+#include "Model/Cue.h"
+
+namespace cp
+{
+
+//==============================================================================
+juce::String toString (LinkMode mode)
+{
+    switch (mode)
+    {
+        case LinkMode::none:         return "none";
+        case LinkMode::autoContinue: return "autoContinue";
+        case LinkMode::autoFollow:   return "autoFollow";
+        case LinkMode::crossfade:    return "crossfade";
+    }
+
+    return "none";
+}
+
+LinkMode linkModeFromString (const juce::String& s)
+{
+    if (s == "autoContinue") return LinkMode::autoContinue;
+    if (s == "autoFollow")   return LinkMode::autoFollow;
+    if (s == "crossfade")    return LinkMode::crossfade;
+
+    return LinkMode::none;
+}
+
+juce::StringArray linkModeNames()
+{
+    return { "None", "Auto-continue", "Auto-follow", "Crossfade" };
+}
+
+//==============================================================================
+juce::String toString (VampRelease r)
+{
+    return r == VampRelease::immediately ? "immediately" : "atEndOfPass";
+}
+
+VampRelease vampReleaseFromString (const juce::String& s)
+{
+    return s == "immediately" ? VampRelease::immediately : VampRelease::atEndOfPass;
+}
+
+//==============================================================================
+juce::String toString (CueType t)
+{
+    return t == CueType::streaming ? "streaming" : "audioFile";
+}
+
+CueType cueTypeFromString (const juce::String& s)
+{
+    return s == "streaming" ? CueType::streaming : CueType::audioFile;
+}
+
+juce::String toString (StreamingAudioPath p)
+{
+    return p == StreamingAudioPath::remoteDevice ? "remoteDevice" : "localCapture";
+}
+
+StreamingAudioPath streamingAudioPathFromString (const juce::String& s)
+{
+    return s == "remoteDevice" ? StreamingAudioPath::remoteDevice
+                               : StreamingAudioPath::localCapture;
+}
+
+//==============================================================================
+Cue::Cue()
+    : id (juce::Uuid()) {}
+
+double Cue::resolvedEndTime() const noexcept
+{
+    if (endTime > 0.0)
+        return fileDuration > 0.0 ? juce::jmin (endTime, fileDuration) : endTime;
+
+    return fileDuration;
+}
+
+double Cue::trimmedLength() const noexcept
+{
+    return juce::jmax (0.0, resolvedEndTime() - startTime);
+}
+
+bool Cue::hasUsableVamp() const noexcept
+{
+    if (! vampEnabled)
+        return false;
+
+    const auto regionEnd = resolvedEndTime();
+
+    return vampEnd > vampStart
+        && vampStart >= startTime
+        && (regionEnd <= 0.0 || vampEnd <= regionEnd);
+}
+
+double Cue::playbackLength() const noexcept
+{
+    // A streaming cue's length is decided by the service, and a vamp is open-ended by
+    // definition, so neither has a length we can state up front.
+    if (type == CueType::streaming || hasUsableVamp())
+        return 0.0;
+
+    const auto once = trimmedLength();
+
+    if (! loopEnabled)
+        return once;
+
+    if (loopCount <= 0)
+        return 0.0;   // endless
+
+    return once * (double) loopCount;
+}
+
+std::vector<RoutePoint> Cue::effectiveRouting (int numFileChannels, int numDeviceOutputs) const
+{
+    if (! routing.empty())
+    {
+        // Drop anything that no longer fits the current file or device, rather than
+        // silently writing past the end of a buffer later on.
+        std::vector<RoutePoint> valid;
+        valid.reserve (routing.size());
+
+        for (const auto& r : routing)
+            if (juce::isPositiveAndBelow (r.sourceChannel, numFileChannels)
+                && juce::isPositiveAndBelow (r.outputChannel, numDeviceOutputs))
+                valid.push_back (r);
+
+        return valid;
+    }
+
+    // Default: straight through, file channel n to device output n.
+    std::vector<RoutePoint> def;
+    const auto n = juce::jmin (numFileChannels, numDeviceOutputs, limits::maxSourceChannels);
+
+    for (int ch = 0; ch < n; ++ch)
+        def.push_back ({ ch, ch, 1.0f });
+
+    return def;
+}
+
+bool Cue::isPlayable() const noexcept
+{
+    if (type == CueType::streaming)
+        return streaming.provider.isNotEmpty() && streaming.uri.isNotEmpty();
+
+    return audioFile.existsAsFile() && fileChannels > 0 && fileSampleRate > 0.0;
+}
+
+//==============================================================================
+namespace
+{
+    /** Stores a path relative to the show file when the two share a root, so that moving
+        a show folder to another machine keeps the audio references intact. */
+    juce::String encodePath (const juce::File& f, const juce::File& showDirectory)
+    {
+        if (f == juce::File())
+            return {};
+
+        if (showDirectory.isDirectory() && f.isAChildOf (showDirectory))
+            return f.getRelativePathFrom (showDirectory);
+
+        return f.getFullPathName();
+    }
+
+    juce::File decodePath (const juce::String& s, const juce::File& showDirectory)
+    {
+        if (s.isEmpty())
+            return {};
+
+        if (juce::File::isAbsolutePath (s))
+            return juce::File (s);
+
+        if (showDirectory.isDirectory())
+            return showDirectory.getChildFile (s);
+
+        return {};
+    }
+}
+
+juce::var Cue::toVar (const juce::File& showDirectory) const
+{
+    auto* o = new juce::DynamicObject();
+
+    o->setProperty ("id",     id.toDashedString());
+    o->setProperty ("type",   toString (type));
+    o->setProperty ("number", number);
+    o->setProperty ("name",   name);
+    o->setProperty ("notes",  notes);
+
+    o->setProperty ("audioFile",      encodePath (audioFile, showDirectory));
+    o->setProperty ("fileDuration",   fileDuration);
+    o->setProperty ("fileChannels",   fileChannels);
+    o->setProperty ("fileSampleRate", fileSampleRate);
+
+    if (type == CueType::streaming)
+    {
+        auto* s = new juce::DynamicObject();
+        s->setProperty ("provider",       streaming.provider);
+        s->setProperty ("uri",            streaming.uri);
+        s->setProperty ("displayName",    streaming.displayName);
+        s->setProperty ("shuffle",        streaming.shuffle);
+        s->setProperty ("repeat",         streaming.repeat);
+        s->setProperty ("targetDeviceId", streaming.targetDeviceId);
+        s->setProperty ("audioPath",      toString (streaming.audioPath));
+        s->setProperty ("captureFirstInputChannel", streaming.captureFirstInputChannel);
+        s->setProperty ("captureNumChannels",       streaming.captureNumChannels);
+        o->setProperty ("streaming", juce::var (s));
+    }
+
+    o->setProperty ("startTime", startTime);
+    o->setProperty ("endTime",   endTime);
+    o->setProperty ("gainDb",    gainDb);
+    o->setProperty ("preWait",   preWait);
+
+    o->setProperty ("fadeInTime",   fadeInTime);
+    o->setProperty ("fadeInShape",  toString (fadeInShape));
+    o->setProperty ("fadeOutTime",  fadeOutTime);
+    o->setProperty ("fadeOutShape", toString (fadeOutShape));
+
+    o->setProperty ("loopEnabled", loopEnabled);
+    o->setProperty ("loopCount",   loopCount);
+
+    o->setProperty ("vampEnabled", vampEnabled);
+    o->setProperty ("vampStart",   vampStart);
+    o->setProperty ("vampEnd",     vampEnd);
+    o->setProperty ("vampRelease", toString (vampRelease));
+
+    {
+        auto* l = new juce::DynamicObject();
+        l->setProperty ("mode",     toString (link.mode));
+        l->setProperty ("target",   link.target.isNull() ? juce::String()
+                                                         : link.target.toDashedString());
+        l->setProperty ("delay",    link.delay);
+        l->setProperty ("duration", link.duration);
+        l->setProperty ("shape",    toString (link.shape));
+        o->setProperty ("link", juce::var (l));
+    }
+
+    {
+        juce::Array<juce::var> arr;
+
+        for (const auto& r : routing)
+        {
+            auto* p = new juce::DynamicObject();
+            p->setProperty ("src",  r.sourceChannel);
+            p->setProperty ("dst",  r.outputChannel);
+            p->setProperty ("gain", (double) r.gain);
+            arr.add (juce::var (p));
+        }
+
+        o->setProperty ("routing", arr);
+    }
+
+    return juce::var (o);
+}
+
+Cue Cue::fromVar (const juce::var& v, const juce::File& showDirectory)
+{
+    Cue c;
+
+    if (! v.isObject())
+        return c;
+
+    const auto get = [&v] (const char* key) { return v.getProperty (key, {}); };
+
+    if (const auto idStr = get ("id").toString(); idStr.isNotEmpty())
+        c.id = juce::Uuid (idStr);
+
+    c.type   = cueTypeFromString (get ("type").toString());
+    c.number = get ("number").toString();
+    c.name   = get ("name").toString();
+    c.notes  = get ("notes").toString();
+
+    c.audioFile      = decodePath (get ("audioFile").toString(), showDirectory);
+    c.fileDuration   = (double) get ("fileDuration");
+    c.fileChannels   = (int)    get ("fileChannels");
+    c.fileSampleRate = (double) get ("fileSampleRate");
+
+    if (const auto s = get ("streaming"); s.isObject())
+    {
+        c.streaming.provider       = s.getProperty ("provider", {}).toString();
+        c.streaming.uri            = s.getProperty ("uri", {}).toString();
+        c.streaming.displayName    = s.getProperty ("displayName", {}).toString();
+        c.streaming.shuffle        = (bool) s.getProperty ("shuffle", false);
+        c.streaming.repeat         = (bool) s.getProperty ("repeat", false);
+        c.streaming.targetDeviceId = s.getProperty ("targetDeviceId", {}).toString();
+        c.streaming.audioPath      = streamingAudioPathFromString (
+                                         s.getProperty ("audioPath", {}).toString());
+        c.streaming.captureFirstInputChannel = (int) s.getProperty ("captureFirstInputChannel", 0);
+        c.streaming.captureNumChannels       = juce::jmax (1, (int) s.getProperty ("captureNumChannels", 2));
+    }
+
+    c.startTime = (double) get ("startTime");
+    c.endTime   = (double) get ("endTime");
+    c.gainDb    = (double) get ("gainDb");
+    c.preWait   = (double) get ("preWait");
+
+    c.fadeInTime   = (double) get ("fadeInTime");
+    c.fadeInShape  = fadeShapeFromString (get ("fadeInShape").toString());
+    c.fadeOutTime  = (double) get ("fadeOutTime");
+    c.fadeOutShape = fadeShapeFromString (get ("fadeOutShape").toString());
+
+    c.loopEnabled = (bool) get ("loopEnabled");
+    c.loopCount   = (int)  get ("loopCount");
+
+    c.vampEnabled = (bool)   get ("vampEnabled");
+    c.vampStart   = (double) get ("vampStart");
+    c.vampEnd     = (double) get ("vampEnd");
+    c.vampRelease = vampReleaseFromString (get ("vampRelease").toString());
+
+    if (const auto l = get ("link"); l.isObject())
+    {
+        c.link.mode  = linkModeFromString (l.getProperty ("mode", {}).toString());
+
+        if (const auto t = l.getProperty ("target", {}).toString(); t.isNotEmpty())
+            c.link.target = juce::Uuid (t);
+
+        c.link.delay    = (double) l.getProperty ("delay", 0.0);
+        c.link.duration = (double) l.getProperty ("duration", 3.0);
+        c.link.shape    = fadeShapeFromString (l.getProperty ("shape", {}).toString());
+    }
+
+    if (const auto* arr = get ("routing").getArray())
+    {
+        for (const auto& item : *arr)
+            c.routing.push_back ({ (int)   item.getProperty ("src", 0),
+                                   (int)   item.getProperty ("dst", 0),
+                                   (float) (double) item.getProperty ("gain", 1.0) });
+    }
+
+    return c;
+}
+
+} // namespace cp

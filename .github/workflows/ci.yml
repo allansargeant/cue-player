@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macos-13 (Intel) runners are retired; build x86_64 by cross-compiling here.
+          - name: macOS (universal)
+            os: macos-14
+            cmake_args: -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64
+          - name: Linux (ALSA + JACK)
+            os: ubuntu-latest
+            cmake_args: ""
+          - name: Windows (WASAPI + DirectSound)
+            os: windows-latest
+            cmake_args: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libjack-jackd2-dev \
+            libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libglu1-mesa-dev mesa-common-dev \
+            libcurl4-openssl-dev
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Run engine tests
+        shell: bash
+        run: |
+          # The binary lands in a per-config folder on multi-config generators and a flat
+          # one otherwise, so find it rather than guessing.
+          BIN=$(find build -type f -name 'CuePlayerTests*' ! -name '*.pdb' ! -name '*.dSYM' | head -1)
+          echo "running $BIN"
+          "$BIN"
