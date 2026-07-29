@@ -621,13 +621,14 @@ void MainComponent::preloadShowAudio()
 
 
 //==============================================================================
-void MainComponent::captureScreenshots (const juce::File& outputDir, std::function<void()> onComplete)
+void MainComponent::loadDemoShow()
 {
+    // Borrows the screenshot flag: both build a throwaway demo state, and neither may be
+    // written back over the ports and devices the operator actually uses.
     screenshotMode = true;
-    outputDir.createDirectory();
 
     screenshotAudioDirectory = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                   .getChildFile ("simplecue-screenshot-audio");
+                                   .getChildFile ("simplecue-demo-audio");
 
     const auto audioFiles = screenshots::writeDemoAudio (screenshotAudioDirectory);
     screenshots::buildDemoShow (show, audioFiles);
@@ -644,6 +645,13 @@ void MainComponent::captureScreenshots (const juce::File& outputDir, std::functi
     // audio is synthesised at a modest level, so this lands around -20 dBFS: audible if
     // the machine's output is up, but not a shock.
     audioEngine.setMasterGainDb (-18.0);
+}
+
+//==============================================================================
+void MainComponent::captureScreenshots (const juce::File& outputDir, std::function<void()> onComplete)
+{
+    outputDir.createDirectory();
+    loadDemoShow();
 
     // The waveform thumbnail and the sample cache both load on background threads, so the
     // capture has to wait for them rather than photographing a half-drawn window.

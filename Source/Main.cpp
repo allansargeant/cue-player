@@ -61,8 +61,7 @@ public:
         // `--screenshots <dir>` loads a demo show and writes PNGs of the app for the README,
         // then quits. Rendering happens offscreen through JUCE's own rasteriser, so it needs
         // no screen-recording permission and captures exactly what the app draws.
-        if (const auto arguments = juce::StringArray::fromTokens (commandLine, true);
-            arguments.contains ("--screenshots"))
+        if (arguments.contains ("--screenshots"))
         {
             const auto target = arguments[arguments.indexOf ("--screenshots") + 1].unquoted().trim();
 
@@ -76,6 +75,17 @@ public:
             mainWindow->setSize (1440, 900);
             mainWindow->getMainComponent().captureScreenshots (juce::File (target),
                                                                [this] { quit(); });
+            return;
+        }
+
+        // `--demo` loads the same demo show and then simply keeps running, so the app can be
+        // filmed. The demo control settings listen for OSC on 53000, which means a capture
+        // can be choreographed over the app's own control surface instead of by driving the
+        // mouse. 16:9 so the recording needs no reframing.
+        if (arguments.contains ("--demo"))
+        {
+            mainWindow->setSize (1600, 900);
+            mainWindow->getMainComponent().loadDemoShow();
             return;
         }
 

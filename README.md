@@ -15,6 +15,11 @@
 A platform-independent audio cue player for theatre, live events and installation, built
 around cues, fades, links, loops and vamps.
 
+[![Watch SimpleCue running — 45 seconds](docs/video-thumb.png)](https://www.youtube.com/watch?v=wUpJPgYGfFk)
+
+*A 45-second tour. Every frame is the real application, recorded on screen and driven over
+its own OSC control surface.*
+
 - **Cues** — an audio file with adjustable in and out points, gain and pre-wait.
 - **Fades** — automatic fade-in and fade-out with five curve shapes.
 - **Links** — how a cue hands over to the next: fire it instantly, fire it at the end, or

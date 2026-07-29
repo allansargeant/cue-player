@@ -44,6 +44,13 @@ public:
         screenshot run never leaves the operator's ports and devices rearranged. */
     void captureScreenshots (const juce::File& outputDir, std::function<void()> onComplete);
 
+    /** Loads the demo show the screenshots are taken of and applies the demo control
+        settings, then leaves the app running. Used by `SimpleCue --demo` to film the app:
+        those settings listen for OSC on 53000, so a capture can be choreographed over the
+        app's own control surface rather than by driving the mouse. Suppresses the usual
+        settings save for the same reason a screenshot run does. */
+    void loadDemoShow();
+
     //== MenuBarModel ==========================================================
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex (int index, const juce::String& name) override;
