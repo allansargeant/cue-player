@@ -9,9 +9,14 @@ CMake. Public repo. Phases 1 (engine/UI) and 2 (control protocols) complete; Pha
 - Configure: `cmake -B build -DCMAKE_BUILD_TYPE=Release`
 - Build: `cmake --build build -j8`
 - Tests: `./build/SimpleCueTests_artefacts/<config>/SimpleCueTests`
+- Diagnostics bundle: `SimpleCue --collect-diagnostics` (or Help -> Collect Diagnostics...)
+- See a crash report: build target `SimpleCueDiagCrash`, run it with `segv` or `exception`
 
 The internal C++ namespace is still `cp`. It predates the rename to SimpleCue and is left
 alone deliberately: renaming it touches every file for no user-visible gain.
+
+## Logging
+Log via the `CP_LOG_*` macros from `Source/Diag/Diag.h`, never `DBG` or `std::cout`. Lines go to a rotating daily file *and* an in-memory ring that gets embedded in a crash report; every line is flushed as written, because buffered output dies with the process. Crashes are caught two ways (native signal handler + `unhandledException`). **A plugin must pass `installCrashHandler = false`** - it lives in the host's process. See docs/diagnostics.md.
 
 ## Architecture
 - `Source/Model` — `Cue`, `CueList`, `Show` (JSON `.cueshow`), `FadeCurve`, `CueStep`,

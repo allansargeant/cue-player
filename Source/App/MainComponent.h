@@ -48,6 +48,7 @@ public:
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex (int index, const juce::String& name) override;
     void menuItemSelected (int menuItemID, int topLevelMenuIndex) override;
+    void collectDiagnostics();
 
     //== ApplicationCommandTarget ==============================================
     ApplicationCommandTarget* getNextCommandTarget() override;

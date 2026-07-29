@@ -1,6 +1,7 @@
 #include "App/MainComponent.h"
 
 #include "App/ScreenshotMode.h"
+#include "Diag/Diag.h"
 
 namespace cp
 {
@@ -1026,9 +1027,21 @@ void MainComponent::filesDropped (const juce::StringArray& files, int, int)
 }
 
 //==============================================================================
+namespace
+{
+// Plain menu item IDs, not ApplicationCommands: these two are not bound to
+// keys, do not appear in a toolbar, and have no enabled/disabled state to
+// track, so a command would be ceremony around a single call.
+enum HelpMenuIDs
+{
+    collectDiagnosticsItem = 9001,
+    openLogFolderItem      = 9002
+};
+} // namespace
+
 juce::StringArray MainComponent::getMenuBarNames()
 {
-    return { "File", "Cue", "Transport", "Audio" };
+    return { "File", "Cue", "Transport", "Audio", "Help" };
 }
 
 juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String&)
@@ -1079,6 +1092,11 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String&)
             menu.addCommandItem (&commandManager, CommandIDs::showSettings);
             break;
 
+        case 4:
+            menu.addItem (collectDiagnosticsItem, "Collect Diagnostics...");
+            menu.addItem (openLogFolderItem, "Open Log Folder");
+            break;
+
         default:
             break;
     }
@@ -1086,7 +1104,49 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String&)
     return menu;
 }
 
-void MainComponent::menuItemSelected (int, int) {}
+void MainComponent::menuItemSelected (int menuItemID, int)
+{
+    if (menuItemID == collectDiagnosticsItem)
+        collectDiagnostics();
+    else if (menuItemID == openLogFolderItem)
+        cp::diag::logDirectory().revealToUser();
+}
+
+void MainComponent::collectDiagnostics()
+{
+    const auto bundle = cp::diag::collectDiagnostics();
+
+    if (bundle == juce::File())
+    {
+        juce::NativeMessageBox::showAsync (
+            juce::MessageBoxOptions()
+                .withIconType (juce::MessageBoxIconType::WarningIcon)
+                .withTitle ("Could not collect diagnostics")
+                .withMessage ("Nothing could be written to "
+                              + cp::diag::logDirectory().getFullPathName())
+                .withButton ("OK"),
+            nullptr);
+        return;
+    }
+
+    CP_LOG_INFO ("diagnostics bundle written to " + bundle.getFullPathName());
+
+    // A dialog cannot be copied out of, and nobody retypes a path — so put it
+    // on the clipboard and reveal the file as well.
+    juce::SystemClipboard::copyTextToClipboard (bundle.getFullPathName());
+    bundle.revealToUser();
+
+    juce::NativeMessageBox::showAsync (
+        juce::MessageBoxOptions()
+            .withIconType (juce::MessageBoxIconType::InfoIcon)
+            .withTitle ("Diagnostics collected")
+            .withMessage ("Written to:\n" + bundle.getFullPathName()
+                          + "\n\nThe path has been copied to your clipboard. Attach that "
+                            "file to a bug report - it holds the logs, the settings (with "
+                            "any passwords removed) and details of any recent crash.")
+            .withButton ("OK"),
+        nullptr);
+}
 
 //==============================================================================
 juce::ApplicationCommandTarget* MainComponent::getNextCommandTarget()
