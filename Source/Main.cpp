@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "App/MainComponent.h"
+#include "Diag/Diag.h"
 #include "GUI/LookAndFeel.h"
 
 namespace cp
@@ -19,6 +20,33 @@ public:
 
     void initialise (const juce::String& commandLine) override
     {
+        // Before anything that can fail, so a failure during startup is logged
+        // and captured like any other.
+        cp::diag::init ({ "SimpleCue", "SIMPLECUE", getApplicationVersion() });
+
+        const auto arguments = juce::StringArray::fromTokens (commandLine, true);
+
+        // Headless escape hatch. The menu item is how an operator does this;
+        // this is how a support engineer does it over the phone.
+        if (arguments.contains ("--collect-diagnostics"))
+        {
+            const auto bundle = cp::diag::collectDiagnostics();
+
+            if (bundle == juce::File())
+            {
+                std::fprintf (stderr, "could not write a diagnostics bundle\n");
+                setApplicationReturnValue (1);
+            }
+            else
+            {
+                // stdout, so it can be used in a script; logging went to stderr.
+                std::printf ("%s\n", bundle.getFullPathName().toRawUTF8());
+            }
+
+            quit();
+            return;
+        }
+
         juce::LookAndFeel::setDefaultLookAndFeel (&lookAndFeel);
 
         juce::PropertiesFile::Options options;
@@ -65,6 +93,25 @@ public:
         mainWindow = nullptr;
         juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
         properties.saveIfNeeded();
+        CP_LOG_INFO ("shutting down");
+        cp::diag::shutdown();
+    }
+
+    /** C++ exceptions that escape a message-loop callback.
+
+        The native handler installed by diag::init catches signals — a bad
+        pointer, a stack overflow. This catches the other half: a `throw` that
+        nobody caught. Without it JUCE terminates with no record of why. */
+    void unhandledException (const std::exception* e,
+                             const juce::String& sourceFilename,
+                             int lineNumber) override
+    {
+        const auto message = juce::String (e != nullptr ? e->what() : "unknown exception")
+                           + " at " + sourceFilename + ":" + juce::String (lineNumber);
+
+        CP_LOG_FATAL ("unhandled exception: " + message);
+        cp::diag::writeCrashReport ("unhandled-exception", message,
+                                    juce::SystemStats::getStackBacktrace());
     }
 
     void systemRequestedQuit() override

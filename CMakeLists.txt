@@ -29,6 +29,40 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # --------------------------------------------------------------------------------------
 set(SIMPLECUE_ASIO_SDK_PATH "" CACHE PATH "Path to the unpacked Steinberg ASIO SDK (Windows only)")
 
+# --------------------------------------------------------------------------------------
+# Build identity for crash reports.
+#
+# A compiled binary cannot read its own git revision at runtime, and a crash report that
+# only carries a version number is useless during a show: the version has not changed
+# since the last release, but the binary on the machine may be three commits past it.
+# `-dirty` means the tree had uncommitted changes, so the sha alone does not identify
+# the source that was built.
+# --------------------------------------------------------------------------------------
+find_package(Git QUIET)
+set(SIMPLECUE_GIT_REV "unknown")
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short=12 HEAD
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE SIMPLECUE_GIT_REV
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} status --porcelain --untracked-files=no
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE SIMPLECUE_GIT_DIRTY
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(NOT SIMPLECUE_GIT_REV)
+        set(SIMPLECUE_GIT_REV "unknown")
+    elseif(SIMPLECUE_GIT_DIRTY)
+        set(SIMPLECUE_GIT_REV "${SIMPLECUE_GIT_REV}-dirty")
+    endif()
+endif()
+message(STATUS "SimpleCue build revision: ${SIMPLECUE_GIT_REV}")
+
 include(FetchContent)
 FetchContent_Declare(
     JUCE
@@ -54,6 +88,8 @@ target_sources(SimpleCue
         Source/Main.cpp
         Source/App/MainComponent.cpp
         Source/App/ScreenshotMode.cpp
+
+        Source/Diag/Diag.cpp
 
         Source/Model/Cue.cpp
         Source/Model/CueList.cpp
@@ -97,6 +133,7 @@ target_compile_definitions(SimpleCue
         JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:SimpleCue,JUCE_VERSION>"
         JUCE_DISPLAY_SPLASH_SCREEN=0
         JUCE_MODAL_LOOPS_PERMITTED=0
+        DIAG_GIT_REV="${SIMPLECUE_GIT_REV}"
 )
 
 # ---- Audio backends -----------------------------------------------------------------
@@ -153,6 +190,29 @@ elseif(WIN32)
     message(STATUS "SimpleCue: ASIO disabled (set SIMPLECUE_ASIO_SDK_PATH to enable). "
                    "WASAPI and DirectSound remain available.")
 endif()
+
+# ---- Diagnostics crash example ------------------------------------------------------
+# Deliberately crashes, so the crash handler is something that has been observed working
+# rather than assumed. See docs/diagnostics.md.
+juce_add_console_app(SimpleCueDiagCrash PRODUCT_NAME "SimpleCueDiagCrash")
+
+target_sources(SimpleCueDiagCrash PRIVATE Tests/DiagCrashExample.cpp Source/Diag/Diag.cpp)
+target_include_directories(SimpleCueDiagCrash PRIVATE Source)
+
+target_compile_definitions(SimpleCueDiagCrash
+    PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_STANDALONE_APPLICATION=1
+        DIAG_GIT_REV="${SIMPLECUE_GIT_REV}")
+
+target_link_libraries(SimpleCueDiagCrash
+    PRIVATE
+        juce::juce_core
+        juce::juce_events
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
 
 # ---- Engine tests -------------------------------------------------------------------
 # Console harness that drives the real CueVoice with a ramp signal and checks positions,
