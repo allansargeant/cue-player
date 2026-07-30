@@ -148,7 +148,7 @@ jobs:
           tar czf "$GITHUB_WORKSPACE/simplecue-${{ matrix.artefact }}.tar.gz" SimpleCue README.md LICENSE
 
       - name: Upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: simplecue-${{ matrix.artefact }}
           path: |
@@ -200,7 +200,7 @@ jobs:
           done
           ls -l installers
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: simplecue-windows-installers
           path: installers/*
