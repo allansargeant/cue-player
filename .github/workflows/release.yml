@@ -106,8 +106,16 @@ jobs:
         # bundle is refused with "is damaged and can't be opened".
         run: |
           source scripts/release-lib.sh
-          version="${GITHUB_REF_NAME#v}"
-          [ -n "$version" ] || version="$(sed -n 's/^project(SimpleCue VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          # On a workflow_dispatch GITHUB_REF_NAME is the branch ("main"), not a
+          # tag — which is how v0.3.1 first shipped installers called
+          # simplecue-main-*. Prefer the dispatch input, and only accept a ref
+          # name that actually looks like a version.
+          version="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${version#v}"
+          case "$version" in
+            [0-9]*) ;;
+            *) version="$(sed -n 's/^project(SimpleCue VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)" ;;
+          esac
           rl_init "SimpleCue" simplecue "$version" com.stoatworks.simplecue "$GITHUB_WORKSPACE"
           stage="$RUNNER_TEMP/stage-mac"
           rm -rf "$stage"; mkdir -p "$stage"
@@ -172,8 +180,12 @@ jobs:
         shell: bash
         run: |
           source scripts/release-lib.sh
-          version="${GITHUB_REF_NAME#v}"
-          [ -n "$version" ] || version="$(sed -n 's/^project(SimpleCue VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          version="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${version#v}"
+          case "$version" in
+            [0-9]*) ;;
+            *) version="$(sed -n 's/^project(SimpleCue VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)" ;;
+          esac
           rl_init "SimpleCue" simplecue "$version" com.stoatworks.simplecue "$PWD/installers"
           for arch in x64 arm64; do
             zip="$(find artifacts -name "simplecue-windows-${arch}.zip" | head -1)"

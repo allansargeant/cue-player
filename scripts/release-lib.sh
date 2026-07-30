@@ -447,9 +447,19 @@ rl_dmg() { # rl_dmg <label> <stagedir> [--app <BundleName>]
     rl_note "create-dmg failed, falling back to hdiutil"
   fi
 
-  hdiutil create -quiet -volname "${RL_NAME} ${RL_VERSION}" \
-                 -srcfolder "$stage" -ov -format UDZO "$outfile"
-  rl_note "$(basename "$outfile")"
+  # -quiet hides hdiutil's diagnostics too, which turned a CI failure into a
+  # bare "exit code 1". Capture the output and print it only when it matters.
+  local hdlog; hdlog="$(mktemp)"
+  if hdiutil create -volname "${RL_NAME} ${RL_VERSION}" \
+                    -srcfolder "$stage" -ov -format UDZO "$outfile" >"$hdlog" 2>&1; then
+    rm -f "$hdlog"
+    rl_note "$(basename "$outfile")"
+  else
+    echo "hdiutil failed building ${label}:" >&2
+    cat "$hdlog" >&2
+    rm -f "$hdlog"
+    return 1
+  fi
 }
 
 # ------------------------------------------------------------------ report --
