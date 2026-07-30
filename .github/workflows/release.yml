@@ -55,7 +55,7 @@ jobs:
             experimental: true
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
@@ -167,7 +167,7 @@ jobs:
     # avoids depending on whatever NSIS happens to be present on the Windows
     # images (the arm64 image in particular cannot run the 32-bit makensis).
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v4
         with:
