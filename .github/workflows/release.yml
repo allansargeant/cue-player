@@ -217,7 +217,18 @@ jobs:
           files: |
             artefacts/simplecue-*.zip
             artefacts/simplecue-*.tar.gz
+            artefacts/simplecue-*.dmg
+            artefacts/simplecue-*.pkg
+            artefacts/simplecue-*-setup.exe
           body: |
+            **macOS** — `.pkg` installs SimpleCue into /Applications; `.dmg` lets you drag it
+            yourself; the `.zip` is the bare app. All three are universal (Intel + Apple Silicon).
+
+            **Windows** — `-setup.exe` installs with Start Menu and Desktop shortcuts and an
+            Add/Remove Programs entry; the `.zip` is portable.
+
+            **Linux** — portable `.tar.gz`.
+
             Builds are unsigned.
 
             **macOS** — the app is not notarised, so Gatekeeper will refuse it on first

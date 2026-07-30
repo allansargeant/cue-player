@@ -253,8 +253,18 @@ NSI
   # Under LC_CTYPE=C that conversion throws std::bad_alloc and aborts *with a
   # zero exit status*, so force a UTF-8 locale and verify the file was written
   # rather than trusting the return code.
+  #
+  # Which UTF-8 locale exists varies: C.UTF-8 on most Linux images, en_US.UTF-8
+  # on macOS. Picking one that is not installed would put us back where we
+  # started, so probe rather than assume.
+  local loc
+  if locale -a 2>/dev/null | grep -qx 'C.UTF-8'; then loc=C.UTF-8
+  elif locale -a 2>/dev/null | grep -qix 'en_US.UTF-8'; then loc=en_US.UTF-8
+  else loc="$(locale -a 2>/dev/null | grep -im1 'utf-\?8' || echo en_US.UTF-8)"
+  fi
+
   rm -f "$outfile"
-  LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 makensis -V2 "$nsi" >"$work/makensis.log" 2>&1 || true
+  LC_ALL="$loc" LANG="$loc" makensis -V2 "$nsi" >"$work/makensis.log" 2>&1 || true
   if [[ -s "$outfile" ]]; then
     rl_note "$(basename "$outfile")"
   else
