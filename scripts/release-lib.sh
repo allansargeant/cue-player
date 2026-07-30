@@ -254,21 +254,21 @@ NSI
   # zero exit status*, so force a UTF-8 locale and verify the file was written
   # rather than trusting the return code.
   #
-  # Which UTF-8 locale exists varies: C.UTF-8 on most Linux images, en_US.UTF-8
-  # on macOS. Picking one that is not installed would put us back where we
-  # started, so probe rather than assume.
-  local loc
-  if locale -a 2>/dev/null | grep -qx 'C.UTF-8'; then loc=C.UTF-8
-  elif locale -a 2>/dev/null | grep -qix 'en_US.UTF-8'; then loc=en_US.UTF-8
-  else loc="$(locale -a 2>/dev/null | grep -im1 'utf-\?8' || echo en_US.UTF-8)"
-  fi
-
+  # Which UTF-8 locale actually *works* varies and cannot be inferred from the
+  # name: macOS lists C.UTF-8 but treats it as plain C, which is exactly the
+  # case that aborts. So try candidates in order and keep whichever produces a
+  # file — the only reliable test, given makensis exits 0 even when it dies.
   rm -f "$outfile"
-  LC_ALL="$loc" LANG="$loc" makensis -V2 "$nsi" >"$work/makensis.log" 2>&1 || true
-  if [[ -s "$outfile" ]]; then
+  local loc ok=0
+  for loc in en_US.UTF-8 C.UTF-8 en_GB.UTF-8 UTF-8; do
+    LC_ALL="$loc" LANG="$loc" makensis -V2 "$nsi" >"$work/makensis.log" 2>&1 || true
+    if [[ -s "$outfile" ]]; then ok=1; break; fi
+  done
+
+  if (( ok )); then
     rl_note "$(basename "$outfile")"
   else
-    echo "makensis failed for ${label}:" >&2
+    echo "makensis failed for ${label} (tried every UTF-8 locale):" >&2
     tail -30 "$work/makensis.log" >&2
     rm -rf "$work"
     return 1
