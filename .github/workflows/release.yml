@@ -94,6 +94,36 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "SimpleCue.app" "$GITHUB_WORKSPACE/simplecue-${{ matrix.artefact }}.zip"
           zip -j "$GITHUB_WORKSPACE/simplecue-${{ matrix.artefact }}.zip" README.md LICENSE
 
+      - name: Installers (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        # A zip of a .app is not an install experience. Ship a .dmg and a .pkg
+        # too, using the same helper the local release script uses so the CI
+        # and local artefacts are identical.
+        #
+        # The ad-hoc signature is not cosmetic: arm64 binaries come out of the
+        # linker already signed, x86_64 ones do not, and a completely unsigned
+        # bundle is refused with "is damaged and can't be opened".
+        run: |
+          source scripts/release-lib.sh
+          version="${GITHUB_REF_NAME#v}"
+          [ -n "$version" ] || version="$(sed -n 's/^project(SimpleCue VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          rl_init "SimpleCue" simplecue "$version" com.stoatworks.simplecue "$GITHUB_WORKSPACE"
+          stage="$RUNNER_TEMP/stage-mac"
+          rm -rf "$stage"; mkdir -p "$stage"
+          cp -R build/SimpleCue_artefacts/Release/SimpleCue.app "$stage/"
+          cp README.md LICENSE "$stage/"
+          # Trust lipo, not the build log: a mis-ordered CMAKE_OSX_ARCHITECTURES
+          # yields a single-arch binary that still reports success.
+          archs="$(lipo -archs "$stage/SimpleCue.app/Contents/MacOS/SimpleCue")"
+          echo "SimpleCue.app: $archs"
+          case "$archs" in *arm64*x86_64*|*x86_64*arm64*) ;; *)
+            echo "expected a universal binary, got: $archs" >&2; exit 1 ;;
+          esac
+          rl_adhoc_sign "$stage/SimpleCue.app"
+          rl_dmg "${{ matrix.artefact }}" "$stage" --app "SimpleCue.app"
+          rl_pkg "${{ matrix.artefact }}" "$stage" --app "SimpleCue.app"
+
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -116,11 +146,57 @@ jobs:
           path: |
             simplecue-*.zip
             simplecue-*.tar.gz
+            simplecue-*.dmg
+            simplecue-*.pkg
+          if-no-files-found: error
+
+  windows-installers:
+    name: Windows installers
+    needs: build
+    runs-on: ubuntu-latest
+    # NSIS is a cross-compiler: makensis produces the same installer wherever it
+    # runs. Doing both architectures in one Linux job keeps them identical and
+    # avoids depending on whatever NSIS happens to be present on the Windows
+    # images (the arm64 image in particular cannot run the 32-bit makensis).
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Install NSIS
+        run: sudo apt-get update && sudo apt-get install -y nsis
+
+      - name: Build installers
+        shell: bash
+        run: |
+          source scripts/release-lib.sh
+          version="${GITHUB_REF_NAME#v}"
+          [ -n "$version" ] || version="$(sed -n 's/^project(SimpleCue VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          rl_init "SimpleCue" simplecue "$version" com.stoatworks.simplecue "$PWD/installers"
+          for arch in x64 arm64; do
+            zip="$(find artifacts -name "simplecue-windows-${arch}.zip" | head -1)"
+            if [ -z "$zip" ]; then
+              echo "no build artefact for windows-${arch}, skipping"
+              continue
+            fi
+            stage="$RUNNER_TEMP/stage-${arch}"
+            rm -rf "$stage"; mkdir -p "$stage"
+            unzip -q "$zip" -d "$stage"
+            rl_nsis "windows-${arch}" "$stage" --gui "SimpleCue.exe"
+          done
+          ls -l installers
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simplecue-windows-installers
+          path: installers/*
           if-no-files-found: error
 
   publish:
     name: Publish release
-    needs: build
+    needs: [build, windows-installers]
     runs-on: ubuntu-latest
     # Runs even if an experimental platform dropped out, so the rest still ship.
     if: always()

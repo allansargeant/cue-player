@@ -3,3 +3,5 @@ build/
 *.user
 .vscode/
 .idea/
+dist-release/
+build-release/
