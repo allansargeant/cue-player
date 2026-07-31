@@ -697,7 +697,7 @@ void ControlSetupComponent::resized()
 
 //==============================================================================
 ControlSetupWindow::ControlSetupWindow (ControlHub& hub, std::function<void()> onSettingsChanged)
-    : DocumentWindow ("Control setup", colours::background, DocumentWindow::closeButton)
+    : DocumentWindow ("SimpleCue - Control setup", colours::background, DocumentWindow::closeButton)
 {
     setUsingNativeTitleBar (true);
     setContentOwned (new ControlSetupComponent (hub, std::move (onSettingsChanged)), true);

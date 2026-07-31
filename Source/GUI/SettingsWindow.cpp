@@ -218,7 +218,10 @@ void SettingsComponent::resized()
 SettingsWindow::SettingsWindow (StreamingSettings streaming,
                                 Show& show,
                                 std::function<void (const StreamingSettings&)> onStreamingChanged)
-    : DocumentWindow ("Settings", colours::background, DocumentWindow::closeButton)
+    // App-qualified: these float free of the main window, so "Settings" alone
+    // says nothing in a window switcher or Mission Control. ASCII hyphen, not
+    // an em dash - non-ASCII literals assert inside JUCE (see AGENTS.md).
+    : DocumentWindow ("SimpleCue - Settings", colours::background, DocumentWindow::closeButton)
 {
     setUsingNativeTitleBar (true);
     setContentOwned (new SettingsComponent (std::move (streaming), show,

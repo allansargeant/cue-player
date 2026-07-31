@@ -90,7 +90,7 @@ void AudioSetupComponent::resized()
 
 //==============================================================================
 AudioSetupWindow::AudioSetupWindow (AudioEngine& engine)
-    : DocumentWindow ("Audio setup", colours::background, DocumentWindow::closeButton)
+    : DocumentWindow ("SimpleCue - Audio setup", colours::background, DocumentWindow::closeButton)
 {
     setUsingNativeTitleBar (true);
     setContentOwned (new AudioSetupComponent (engine), true);
