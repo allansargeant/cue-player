@@ -257,6 +257,26 @@ Not yet built:
 - Disk streaming for very long files (everything is memory-resident today).
 - Undo/redo.
 
+## Unsigned builds — Gatekeeper, SmartScreen & Defender Firewall
+
+The release binaries are **not code-signed or notarized** — that needs paid Apple
+and Microsoft developer certificates this project doesn't carry. The downloads are
+fine; the OS just can't identify the publisher, so it warns you the first time.
+
+- **macOS** — *"cannot be opened because the developer cannot be verified"*.
+  Right-click the app → **Open** → **Open**, or clear the flag:
+  `xattr -dr com.apple.quarantine "/Applications/SimpleCue.app"`
+- **Windows** — SmartScreen shows *"Windows protected your PC"* →
+  **More info** → **Run anyway**.
+- **Windows Defender Firewall** — first launch pops *"Allow SimpleCue to communicate on
+  these networks"*. Tick **Private** (and **Domain** on a managed network) — SimpleCue
+  needs it to receive OSC, MIDI Show Control, MMC and Art-Net/sACN control. Deny it and
+  incoming show control is silently dropped — cues will only fire from the local UI.
+- **Linux** — no signing gate.
+
+Per-artifact steps, self-signing, checksum verification and the Defender Firewall reset
+procedure: **[docs/UNSIGNED.md](docs/UNSIGNED.md)**.
+
 ## Licence
 
 MIT — see [LICENSE](LICENSE).
