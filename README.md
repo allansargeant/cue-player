@@ -39,6 +39,51 @@ on the row the next GO will act on. Cue 1 loops under the house, cue 4 is a cont
 no audio and cue 5 is a streaming cue; the inspector below shows the vamp markers on the
 waveform and the exact times underneath.*
 
+<!-- downloads:start -->
+
+## Download
+
+**[v0.3.1](https://github.com/stoatworks-labs/simplecue/releases/tag/v0.3.1)** — prebuilt for macOS, Windows and Linux. Pick your platform:
+
+<details>
+<summary><b>macOS</b> — Universal (Apple Silicon + Intel)</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`simplecue-0.3.1-macos-universal.dmg`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.1/simplecue-0.3.1-macos-universal.dmg) | 5.7 MB |
+| Universal (Apple Silicon + Intel) · .pkg installer | [`simplecue-0.3.1-macos-universal.pkg`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.1/simplecue-0.3.1-macos-universal.pkg) | 5.2 MB |
+| Universal (Apple Silicon + Intel) · .zip archive | [`simplecue-macos-universal.zip`](https://github.com/stoatworks-labs/simplecue/releases/latest/download/simplecue-macos-universal.zip) | 5.1 MB |
+
+</details>
+
+<details>
+<summary><b>Windows</b> — x64, ARM64</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| x64 · .exe installer | [`simplecue-0.3.1-windows-x64-setup.exe`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.1/simplecue-0.3.1-windows-x64-setup.exe) | 2.5 MB |
+| ARM64 · .exe installer | [`simplecue-0.3.1-windows-arm64-setup.exe`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.1/simplecue-0.3.1-windows-arm64-setup.exe) | 2.3 MB |
+| x64 · .zip archive | [`simplecue-windows-x64.zip`](https://github.com/stoatworks-labs/simplecue/releases/latest/download/simplecue-windows-x64.zip) | 3.2 MB |
+| ARM64 · .zip archive | [`simplecue-windows-arm64.zip`](https://github.com/stoatworks-labs/simplecue/releases/latest/download/simplecue-windows-arm64.zip) | 3.3 MB |
+
+</details>
+
+<details>
+<summary><b>Linux</b> — x64, ARM64</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| x64 · .tar.gz archive | [`simplecue-linux-x64.tar.gz`](https://github.com/stoatworks-labs/simplecue/releases/latest/download/simplecue-linux-x64.tar.gz) | 3.0 MB |
+| ARM64 · .tar.gz archive | [`simplecue-linux-arm64.tar.gz`](https://github.com/stoatworks-labs/simplecue/releases/latest/download/simplecue-linux-arm64.tar.gz) | 3.1 MB |
+
+</details>
+
+All builds, checksums and release notes: [github.com/stoatworks-labs/simplecue/releases](https://github.com/stoatworks-labs/simplecue/releases).
+
+These builds are unsigned, so macOS and Windows each warn once on first launch — see [Unsigned builds — Gatekeeper, SmartScreen & Defender Firewall](#unsigned-builds--gatekeeper-smartscreen--defender-firewall) for the one-time fix.
+
+<!-- downloads:end -->
+
 ## Cue lifecycles
 
 A cue is not always a single event. A vamped cue is played, held, released, and eventually
