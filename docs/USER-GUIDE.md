@@ -18,6 +18,12 @@ list runs top to bottom, and **GO** fires whatever is on standby.
 
 Everything else is about how cues start, stop, and hand over to each other.
 
+![The SimpleCue window: GO and the standby cue top left, the cue list in the middle, what is currently sounding on the right, and the waveform with in/out and vamp markers underneath.](images/main-window.png)
+
+*Cue 3 is vamping — the yellow **VAMP 1** badge on the row, its **Devamp** sub-cue exposed
+beneath it, and **Release vamp** lit in the transport. Note the cue numbers: `3.5` and `7.5` sit
+between whole numbers, the way a prompt book does.*
+
 ---
 
 ## Cue numbers
@@ -67,8 +73,9 @@ This is the feature that handles live theatre not running to time. Underscore a 
 or hold music under an entrance, and it goes round and round until you press GO — then it
 leaves the loop and continues, rather than cutting.
 
-Set the vamp region (start and end) and enable it. While vamping, the cue's **Devamp** step
-appears; GO releases it.
+Set the vamp region (start and end) and enable it — the **Vamp from** and **Vamp to** fields
+under the waveform, drawn on it as the shaded region between the `V<` and `>V` markers. While
+vamping, the cue's **Devamp** step appears; GO releases it.
 
 ---
 
@@ -93,6 +100,12 @@ you're never offered the same audio twice.
 Each cue has a routing matrix mapping **source file channels to device output channels**,
 with a gain per point. A stereo file can go to outputs 3 and 4, a mono effect to a single
 speaker, one channel can feed several outputs.
+
+![The audio setup panel: device, sample rate and buffer size, with the output channel list.](images/audio-setup.png)
+
+Audio is resampled to the device rate **at load time**, which is what makes the loop and vamp
+maths exact integer sample arithmetic. The consequence to know about: **changing the device
+sample rate reloads every cue in the show.** Do it before a show, not during one.
 
 Cues without explicit routing get a sensible default from the file's channel count and your
 device's outputs.
