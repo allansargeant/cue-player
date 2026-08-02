@@ -951,6 +951,21 @@ void MainComponent::saveStreamingSettings()
                         juce::JSON::toString (audioEngine.getStreamingSettings().toVar(), true));
 }
 
+void MainComponent::showAbout()
+{
+    // A child of this component rather than a DocumentWindow: it covers the
+    // whole window, dismisses on Escape or a click outside, and does not put a
+    // second entry in the OS window list for a dialog with four links in it.
+    if (aboutPanel.getParentComponent() == nullptr)
+    {
+        addChildComponent (aboutPanel);
+        aboutPanel.setAlwaysOnTop (true);
+    }
+
+    aboutPanel.setBounds (getLocalBounds());
+    aboutPanel.setVisible (true);
+}
+
 void MainComponent::showSettings()
 {
     if (settingsWindow != nullptr)
@@ -1101,6 +1116,8 @@ juce::PopupMenu MainComponent::getMenuForIndex (int index, const juce::String&)
             break;
 
         case 4:
+            menu.addCommandItem (&commandManager, CommandIDs::showAbout);
+            menu.addSeparator();
             menu.addItem (collectDiagnosticsItem, "Collect Diagnostics...");
             menu.addItem (openLogFolderItem, "Open Log Folder");
             break;
@@ -1174,7 +1191,7 @@ void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
         CommandIDs::releaseVamp, CommandIDs::auditionCue,
         CommandIDs::setStandbyToSelected, CommandIDs::standbyPrevious, CommandIDs::standbyNext,
         CommandIDs::showAudioSetup, CommandIDs::showControlSetup,
-        CommandIDs::showSettings });
+        CommandIDs::showSettings, CommandIDs::showAbout });
 }
 
 void MainComponent::getCommandInfo (juce::CommandID commandID, juce::ApplicationCommandInfo& info)
@@ -1316,6 +1333,10 @@ void MainComponent::getCommandInfo (juce::CommandID commandID, juce::Application
             info.setInfo ("Settings...", "Streaming account and new-cue defaults", "Audio", 0);
             break;
 
+        case CommandIDs::showAbout:
+            info.setInfo ("About SimpleCue", "Version, documentation and how to support the work", "Help", 0);
+            break;
+
         default:
             break;
     }
@@ -1403,6 +1424,7 @@ bool MainComponent::perform (const InvocationInfo& info)
         case CommandIDs::showAudioSetup:   showAudioSetup(); return true;
         case CommandIDs::showControlSetup: showControlSetup(); return true;
         case CommandIDs::showSettings:     showSettings(); return true;
+        case CommandIDs::showAbout:        showAbout(); return true;
 
         default:
             return false;

@@ -12,6 +12,7 @@
 #include "GUI/CueListComponent.h"
 #include "GUI/TransportBar.h"
 #include "Model/Show.h"
+#include "../StoatworksAboutPanel.h"
 
 namespace cp
 {
@@ -85,6 +86,7 @@ private:
     void addControlCue();
     void showControlSetup();
     void showSettings();
+    void showAbout();
     void saveStreamingSettings();
     void publishControlStatus();
 
@@ -138,6 +140,11 @@ private:
 
     static constexpr int activeCuesWidth = 300;
     static constexpr int transportHeight = 68;
+
+    /* Vendored from stoatworks-backend/about - see StoatworksAboutPanel.h. */
+
+    stoatworks::AboutPanel aboutPanel;
+
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
