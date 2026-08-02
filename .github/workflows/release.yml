@@ -169,7 +169,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -213,7 +213,7 @@ jobs:
     # Runs even if an experimental platform dropped out, so the rest still ship.
     if: always()
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artefacts
           merge-multiple: true
