@@ -50,8 +50,8 @@ waveform and the exact times underneath.*
 
 | Build | Download | Size |
 | --- | --- | --- |
-| Universal (Apple Silicon + Intel) · .dmg disk image | [`simplecue-0.3.1-macos-universal.dmg`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.1/simplecue-0.3.1-macos-universal.dmg) | 5.7 MB |
-| Universal (Apple Silicon + Intel) · .pkg installer | [`simplecue-0.3.1-macos-universal.pkg`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.1/simplecue-0.3.1-macos-universal.pkg) | 5.2 MB |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`simplecue-0.3.1-macos-universal.dmg`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.2/simplecue-0.3.2-macos-universal.dmg) | 5.5 MB |
+| Universal (Apple Silicon + Intel) · .pkg installer | [`simplecue-0.3.1-macos-universal.pkg`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.2/simplecue-0.3.2-macos-universal.pkg) | 4.9 MB |
 | Universal (Apple Silicon + Intel) · .zip archive | [`simplecue-macos-universal.zip`](https://github.com/stoatworks-labs/simplecue/releases/latest/download/simplecue-macos-universal.zip) | 5.1 MB |
 
 </details>
@@ -61,8 +61,8 @@ waveform and the exact times underneath.*
 
 | Build | Download | Size |
 | --- | --- | --- |
-| x64 · .exe installer | [`simplecue-0.3.1-windows-x64-setup.exe`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.1/simplecue-0.3.1-windows-x64-setup.exe) | 2.5 MB |
-| ARM64 · .exe installer | [`simplecue-0.3.1-windows-arm64-setup.exe`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.1/simplecue-0.3.1-windows-arm64-setup.exe) | 2.3 MB |
+| x64 · .exe installer | [`simplecue-0.3.1-windows-x64-setup.exe`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.2/simplecue-0.3.2-windows-x64-setup.exe) | 2.4 MB |
+| ARM64 · .exe installer | [`simplecue-0.3.1-windows-arm64-setup.exe`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.2/simplecue-0.3.2-windows-arm64-setup.exe) | 2.2 MB |
 | x64 · .zip archive | [`simplecue-windows-x64.zip`](https://github.com/stoatworks-labs/simplecue/releases/latest/download/simplecue-windows-x64.zip) | 3.2 MB |
 | ARM64 · .zip archive | [`simplecue-windows-arm64.zip`](https://github.com/stoatworks-labs/simplecue/releases/latest/download/simplecue-windows-arm64.zip) | 3.3 MB |
 
