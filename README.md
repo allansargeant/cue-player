@@ -322,6 +322,22 @@ fine; the OS just can't identify the publisher, so it warns you the first time.
 Per-artifact steps, self-signing, checksum verification and the Defender Firewall reset
 procedure: **[docs/UNSIGNED.md](docs/UNSIGNED.md)**.
 
+## Control it from Companion
+
+[**companion-module-simplecue**](https://github.com/stoatworks-labs/companion-module-simplecue) is a [Bitfocus Companion](https://bitfocus.io/companion) connection module for this app.
+
+GO, per-cue fire/stop/standby/audition, panic, pause, vamp release, the
+standby marker and the master level, driven over the OSC control surface above —
+with feedbacks for what is standing by, what is sounding, and whether the status
+feed is live.
+
+**Add an OSC target pointing back at Companion**, or the module's actions will
+work while every feedback stays dark. That is by far the most common setup
+mistake, because it looks like a broken module rather than a missing target.
+
+It is not in the official Companion module store — install it via
+**Settings → Developer modules path**.
+
 ## Licence
 
 MIT — see [LICENSE](LICENSE).
