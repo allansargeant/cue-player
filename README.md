@@ -50,8 +50,8 @@ waveform and the exact times underneath.*
 
 | Build | Download | Size |
 | --- | --- | --- |
-| Universal (Apple Silicon + Intel) · .dmg disk image | [`simplecue-0.3.2-macos-universal.dmg`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.2/simplecue-0.3.2-macos-universal.dmg) | 5.7 MB |
-| Universal (Apple Silicon + Intel) · .pkg installer | [`simplecue-0.3.2-macos-universal.pkg`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.2/simplecue-0.3.2-macos-universal.pkg) | 5.2 MB |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`simplecue-0.3.2-macos-universal.dmg`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.2/simplecue-0.3.2-macos-universal.dmg) | 5.2 MB |
+| Universal (Apple Silicon + Intel) · .pkg installer | [`simplecue-0.3.2-macos-universal.pkg`](https://github.com/stoatworks-labs/simplecue/releases/download/v0.3.2/simplecue-0.3.2-macos-universal.pkg) | 5.1 MB |
 | Universal (Apple Silicon + Intel) · .zip archive | [`simplecue-macos-universal.zip`](https://github.com/stoatworks-labs/simplecue/releases/latest/download/simplecue-macos-universal.zip) | 5.1 MB |
 
 </details>
@@ -80,7 +80,7 @@ waveform and the exact times underneath.*
 
 All builds, checksums and release notes: [github.com/stoatworks-labs/simplecue/releases](https://github.com/stoatworks-labs/simplecue/releases).
 
-These builds are unsigned, so macOS and Windows each warn once on first launch — see [Unsigned builds — Gatekeeper, SmartScreen & Defender Firewall](#unsigned-builds--gatekeeper-smartscreen--defender-firewall) for the one-time fix.
+macOS builds are signed and notarised and open normally. The Windows builds are unsigned, so SmartScreen warns once — see [Windows SmartScreen & Defender Firewall](#windows-smartscreen--defender-firewall) for the one-time click-through.
 
 <!-- downloads:end -->
 
